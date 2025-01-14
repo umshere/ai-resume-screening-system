@@ -1,6 +1,5 @@
 import datetime
 import os, json, re
-from typing import Any
 from jinja2 import Environment, FileSystemLoader
 from openai import AzureOpenAI
 from semantic_kernel.kernel import Kernel
@@ -18,21 +17,22 @@ from azure.identity import DefaultAzureCredential
 from semantic_kernel.connectors.search_engine import BingConnector
 from semantic_kernel.core_plugins import WebSearchEnginePlugin
 from semantic_kernel.connectors.ai.function_choice_behavior import FunctionChoiceBehavior
-from typing import Any
 from azure.core.exceptions import ClientAuthenticationError
 from azure.identity import DefaultAzureCredential
 from semantic_kernel.exceptions.function_exceptions import FunctionExecutionException
 
 from src.plugins.presentation import PresentationPlugin
 
+
 class Orchestrator:
+
     def __init__(self, user_input, num_agents):
         self.client = AzureOpenAI(
             azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
             api_key=os.getenv("AZURE_OPENAI_API_KEY"),
             api_version="2024-12-01-preview"
         )
-        
+
         self.env = Environment(loader=FileSystemLoader(os.getenv('TEMPLATE_DIR_PROMPTS')))
         self.template = self.env.get_template(os.getenv('TEMPLATE_SYSTEM_ORCHESTRATOR'))
         self.theme = user_input
@@ -72,12 +72,14 @@ class Orchestrator:
         dynamic_agents = self.get_dynamic_agents(json_response)
         return dynamic_agents
 
+
 class ApprovalTerminationStrategy(KernelFunctionTerminationStrategy):
     """A strategy for determining when an agent should terminate."""
 
     async def should_agent_terminate(self, agent, history):
         """Check if the agent should terminate."""
         return "approved" in history[-1].content.lower()
+
 
 class MultiAgent:
     def __init__(self):
@@ -156,8 +158,7 @@ class MultiAgent:
                         )
           
         return group
-    
-    
+
 
     def auth_callback_factory(self, scope):
         auth_token = None
