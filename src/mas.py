@@ -22,6 +22,7 @@ from typing import Any
 from azure.core.exceptions import ClientAuthenticationError
 from azure.identity import DefaultAzureCredential
 from semantic_kernel.exceptions.function_exceptions import FunctionExecutionException
+from semantic_kernel.functions import KernelArguments
 
 from src.plugins.presentation import PresentationPlugin
 
@@ -112,11 +113,11 @@ class MultiAgent:
             kernel.add_plugin(WebSearchEnginePlugin(BingConnector()), "WebSearch")
             kernel.add_plugin(PresentationPlugin(), "Presentation")
            
-            expert = ChatCompletionAgent(service_id=agent_name,
+            expert = ChatCompletionAgent(id=agent_name,
                                          kernel=kernel,
                                          name=agent_name,
                                          instructions=agent['system_prompt'],
-                                         execution_settings=settings            
+                                         arguments=KernelArguments(settings=settings),         
                                         )
             expert_agents.append(expert)
 
