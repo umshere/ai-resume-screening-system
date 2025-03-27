@@ -19,6 +19,10 @@ class PresentationPlugin:
         if not template.endswith('.pptx'):
             template += '.pptx'
 
+        # If the template does not exist, use the default template
+        if template not in self.list_templates():
+            template = 'default.pptx'
+
         # Create a presentation object
         prs = Presentation(pptx='templates/' + template)
 
