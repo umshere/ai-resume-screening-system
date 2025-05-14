@@ -11,7 +11,7 @@ The deck created is only to demonstrate how to add external capabilities with cu
 
 The diagram below shows how the orchestrator create the agents and the expert agents collaborate with each other to accomplish the goal:
 
-![MAS-Presentation-Builder](https://raw.githubusercontent.com/Azure-Samples/ai-multi-agent-presentation-builder/main/images/mas-orchestrator-deck-builder.png)
+![MAS-Presentation-Builder-01](images/mas-presentation-builder.png)
 
 The **Expert agents** are dynamically created and have a level of autonomy to accomplish its tasks. Each one will be responsible for a specific task (given by the orchestrator).
 
