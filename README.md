@@ -110,7 +110,10 @@ This project framework provides the following enhanced features:
 
 Watch the complete application workflow in action:
 
-https://github.com/user-attachments/assets/streamlit-app-demo-small.mp4
+<video width="100%" controls>
+  <source src="https://github.com/umshere/ai-resume-screening-system/raw/feature/resume-screening-system/streamlit-app-demo-small.mp4" type="video/mp4">
+  Your browser does not support the video tag. <a href="https://github.com/umshere/ai-resume-screening-system/raw/feature/resume-screening-system/streamlit-app-demo-small.mp4">Download the video</a>
+</video>
 
 _A comprehensive demonstration of the 4-step wizard interface, from job profile input to final screening results._
 
