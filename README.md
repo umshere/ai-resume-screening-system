@@ -280,11 +280,13 @@ This system supports **four AI services** - choose the one that best fits your n
 4. Set up environment variables:
 
    **Quick Setup (Recommended):**
+
    ```sh
    ./setup.sh
    ```
-   
+
    **Manual Setup:**
+
    ```sh
    cp .env.example .env
    # Edit .env file with your API keys and configuration
@@ -295,6 +297,7 @@ This system supports **four AI services** - choose the one that best fits your n
 The system supports **multiple AI services**. Choose one and configure it in your `.env` file:
 
 **Quick Setup**: Copy the example file and edit with your preferences:
+
 ```sh
 cp .env.example .env
 # Edit .env file with your chosen AI service and credentials
