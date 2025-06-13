@@ -253,7 +253,7 @@ This system supports **three AI services** - choose the one that best fits your 
 2. Create and activate a virtual environment:
 
    ```sh
-   python -m venv venv
+   python3 -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
    ```
 
@@ -514,6 +514,88 @@ A comprehensive demo showcases the enhanced user interface and AI-powered screen
 - **Results**: View detailed AI-generated matching reports with scores and explanations
 
 The enhanced interface makes it easy to understand the screening process and get professional-quality results.
+
+## 🌍 Deployment
+
+Ready to publish your AI Resume Screening System to the world? We've made it easy with multiple deployment options:
+
+### 🚀 Quick Deploy (Recommended)
+
+Run our automated deployment script:
+
+```bash
+./deploy.sh
+```
+
+This script will:
+
+- ✅ Test your configuration
+- 🎯 Show deployment options
+- 📋 Provide step-by-step instructions
+- 🚀 Help you go live in minutes
+
+### 🌟 **Streamlit Community Cloud (Free)**
+
+Perfect for demos and portfolios:
+
+1. **Push to GitHub**: `git push origin main`
+2. **Deploy**: Visit [share.streamlit.io](https://share.streamlit.io)
+3. **Configure**: Add your API keys in Secrets
+4. **Go Live**: Your app at `https://your-app-name.streamlit.app`
+
+### 🐳 **Docker Deployment**
+
+For production environments:
+
+```bash
+# Build and test locally
+docker build -t ai-resume-screening .
+docker run -p 8501:8501 --env-file .env ai-resume-screening
+
+# Deploy to any cloud platform
+```
+
+### ⚡ **One-Click Cloud Deploy**
+
+- **Railway**: [railway.app](https://railway.app) - $5/month
+- **Render**: [render.com](https://render.com) - Free tier
+- **Google Cloud Run**: Serverless, pay-per-use
+- **AWS ECS**: Enterprise-grade scaling
+
+📖 **Detailed Instructions**: See [DEPLOYMENT.md](DEPLOYMENT.md) for complete deployment guide.
+
+## 🛡️ Usage Protection
+
+Your system includes **comprehensive usage protection** to control API costs when published:
+
+### 💰 **Cost Controls**
+
+- **Daily spending limits** (default: $2/day)
+- **Session limits** (default: 20 resumes)
+- **Real-time cost tracking**
+- **Automatic daily resets**
+
+### 📊 **Smart Monitoring**
+
+- Live usage dashboard
+- Cost estimation before processing
+- Usage analytics and trends
+- Alert system for budget limits
+
+### 🚀 **Quick Setup**
+
+```bash
+./setup_protection.sh  # Configure protection
+./deploy.sh            # Deploy with protection
+```
+
+### 💡 **Expected Costs**
+
+- **Demo use**: $5-15/month
+- **Business use**: $20-100/month
+- **Per resume**: $0.03-0.10 (varies by AI service)
+
+📖 **Complete Guide**: See [USAGE_PROTECTION.md](USAGE_PROTECTION.md) for detailed configuration.
 
 ## Resources
 

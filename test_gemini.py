@@ -7,8 +7,11 @@ load_dotenv()
 
 def test_gemini_api():
     """Test the Gemini API key"""
-    # Configure the API key
-    gemini_api_key = "your-gemini-api-key-here"
+    # Configure the API key from environment
+    gemini_api_key = os.getenv("GEMINI_API_KEY")
+    if not gemini_api_key or gemini_api_key == "your-gemini-api-key-here":
+        print("❌ GEMINI_API_KEY not set in .env file")
+        return False
     genai.configure(api_key=gemini_api_key)
     
     try:

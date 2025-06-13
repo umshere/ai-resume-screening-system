@@ -14,6 +14,7 @@ load_dotenv()
 from semantic_kernel.contents.chat_message_content import ChatMessageContent
 from semantic_kernel.contents.utils.author_role import AuthorRole
 from src.mas import Orchestrator, MultiAgent
+from src.usage_protection import UsageTracker, add_usage_monitoring, show_usage_stats
 
 st.set_page_config(
     page_title="AI Resume Screening & Matching System",
@@ -339,6 +340,17 @@ def app():
     st.title("📋 AI Resume Screening & Matching System 📋")
     st.subheader("Intelligent resume screening with AI expert agents")
     
+    # Usage monitoring display
+    with st.expander("📊 Usage & Cost Monitoring", expanded=False):
+        show_usage_stats()
+        st.markdown("""
+        **💡 Cost Protection Features:**
+        - Daily spending limit: $10
+        - Session limit: 20 resumes
+        - Real-time usage tracking
+        - Automatic reset at midnight
+        """)
+    
     # Progress indicator
     progress_steps = ["Job Profile", "Resumes", "Configuration", "Review & Start"]
     completed_steps = []
@@ -622,6 +634,10 @@ def app():
             key="start_screening_button_tab4" # Added key
         ):
             if can_start:
+                # Check usage limits before proceeding
+                if not add_usage_monitoring():
+                    st.stop()  # Stop execution if limits exceeded
+                
                 st.session_state.running = True
                 # ... rest of your screening logic ...
                 # Ensure job_profile and resumes are correctly passed to main_screening
@@ -642,6 +658,13 @@ def app():
                         )
                         st.session_state.screening_results = screening_results
                         st.session_state.running = False
+                        
+                        # Record usage after successful processing
+                        tracker = UsageTracker()
+                        total_cost = len(resumes_to_screen) * tracker.cost_per_resume
+                        usage = tracker.record_usage(num_resumes=len(resumes_to_screen), actual_cost=total_cost)
+                        
+                        st.success(f"✅ Screening completed! Daily usage: ${usage['daily_cost']:.2f}")
                         
                         # Display results
                         display_screening_results(screening_results, resumes_to_screen)

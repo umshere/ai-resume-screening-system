@@ -1,0 +1,70 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        env:
+          AI_SERVICE: gemini
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python3 test_ai_config.py
+          python3 test_comprehensive.py
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build -t ai-resume-screening:latest .
+
+      - name: Test Docker image
+        run: |
+          docker run -d -p 8501:8501 --name test-container ai-resume-screening:latest
+          sleep 30
+          curl -f http://localhost:8501/_stcore/health || exit 1
+          docker stop test-container
+          docker rm test-container
+
+  deploy-to-railway:
+    needs: [test, build-and-push]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Railway
+        run: |
+          # Add Railway deployment steps here
+          echo "Deploy to Railway or other platform"
+
+    # Uncomment for Streamlit Cloud deployment
+    # - name: Trigger Streamlit Cloud Deployment
+    #   run: |
+    #     curl -X POST "${{ secrets.STREAMLIT_WEBHOOK_URL }}"
