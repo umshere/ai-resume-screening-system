@@ -28,6 +28,7 @@ frozenlist==1.5.0
 gitdb==4.0.12
 GitPython==3.1.44
 google-crc32c==1.6.0
+google-generativeai==0.8.3
 h11==0.14.0
 httpcore==1.0.7
 httpx==0.28.1
@@ -112,4 +113,4 @@ zipp==3.21.0
 # Document processing libraries
 PyPDF2==3.0.1
 python-docx==1.1.2
-pandas==2.2.2
+# pandas already specified above

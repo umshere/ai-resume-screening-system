@@ -5,6 +5,12 @@ import io
 import PyPDF2
 import docx
 from typing import List, Dict
+from dotenv import load_dotenv
+import os
+
+# Load environment variables from .env file
+load_dotenv()
+
 from semantic_kernel.contents.chat_message_content import ChatMessageContent
 from semantic_kernel.contents.utils.author_role import AuthorRole
 from src.mas import Orchestrator, MultiAgent
@@ -112,6 +118,8 @@ def process_resume_files(uploaded_files) -> List[Dict]:
     """Process uploaded resume files and extract text"""
     resumes = []
     for uploaded_file in uploaded_files:
+        st.write(f"🔍 Processing: {uploaded_file.name} (Type: {uploaded_file.type})")
+        
         if uploaded_file.type == "application/pdf":
             text = extract_text_from_pdf(uploaded_file)
         elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
@@ -127,6 +135,11 @@ def process_resume_files(uploaded_files) -> List[Dict]:
                 "filename": uploaded_file.name,
                 "content": text
             })
+            st.success(f"✅ Successfully extracted {len(text)} characters from {uploaded_file.name}")
+        else:
+            st.error(f"❌ Failed to extract text from {uploaded_file.name} - file appears to be empty or corrupted")
+    
+    st.write(f"📊 Total processed resumes: {len(resumes)}")
     return resumes
 
 async def run_resume_screening(job_profile, resumes, num_agents):
@@ -147,23 +160,38 @@ async def run_resume_screening(job_profile, resumes, num_agents):
 
     return expert_agents, expert_agents_names, mas
 
-async def main_screening(job_profile, resumes, num_agents, max_interactions=10):
+async def main_screening(job_profile, resumes, num_agents, max_interactions=None):
     """Main screening process"""
     expert_agents, expert_agents_names, mas = await run_resume_screening(job_profile, resumes, num_agents)
+    
+    # Set max_interactions based on number of agents if not specified
+    if max_interactions is None:
+        max_interactions = max(num_agents * 2, 4)  # At least 2 rounds per agent, minimum 4
     
     with st.sidebar:
         st.title("🤖 Expert Screening Agents")
         agent_placeholders = {name: st.empty() for name in expert_agents_names}
         agent_status = {name: "⏳ Initializing..." for name in expert_agents_names}
         
+        # Define agent specializations for better user understanding
+        agent_specializations = {
+            "Skills_Analysis_Agent": "🔧 Technical Skills & Expertise",
+            "Experience_Evaluation_Agent": "📈 Work Experience & Career",
+            "Education_Assessment_Agent": "🎓 Educational Background",
+            "Cultural_Fit_Agent": "🤝 Team & Cultural Alignment",
+            "Leadership_Assessment_Agent": "👑 Leadership & Management",
+            "Technical_Depth_Agent": "🔬 Deep Technical Analysis"
+        }
+        
         for agent_name in expert_agents_names:
+            specialization = agent_specializations.get(agent_name, "🔍 General Analysis")
             agent_placeholders[agent_name].markdown(
-                f'<div class="agent-status">👤 <strong>{agent_name}</strong><br>{agent_status[agent_name]}</div>', 
+                f'<div class="agent-status">👤 <strong>{agent_name}</strong><br><small>{specialization}</small><br>⏳ Initializing...</div>', 
                 unsafe_allow_html=True
             )
             await asyncio.sleep(1)
 
-    selection_function = mas.create_selection_function(expert_agents_names)
+    selection_function = mas.create_selection_function(expert_agents)
     termination_keyword = 'yes'
     termination_function = mas.create_termination_function(termination_keyword)
 
@@ -176,6 +204,60 @@ async def main_screening(job_profile, resumes, num_agents, max_interactions=10):
 
     interactions: int = 0
     is_complete: bool = False
+    
+    # Define detailed agent activities based on their roles
+    def get_agent_activity(agent_name, round_num, total_resumes):
+        """Get detailed activity description for each agent"""
+        activities = {
+            "Skills_Analysis_Agent": [
+                f"🔍 Analyzing technical skills alignment across {total_resumes} resume(s)",
+                f"⚙️ Evaluating programming languages and frameworks",
+                f"🛠️ Assessing tool proficiency and certifications",
+                f"📊 Cross-referencing skill requirements with candidate experience"
+            ],
+            "Experience_Evaluation_Agent": [
+                f"📈 Evaluating work experience relevance for {total_resumes} candidate(s)",
+                f"🏢 Analyzing company backgrounds and industry experience",
+                f"📅 Assessing career progression and tenure patterns",
+                f"🎯 Matching role responsibilities with job requirements"
+            ],
+            "Education_Assessment_Agent": [
+                f"🎓 Reviewing educational qualifications for {total_resumes} resume(s)",
+                f"🏫 Evaluating degree relevance and institution reputation",
+                f"📚 Assessing additional certifications and training",
+                f"🧠 Analyzing academic achievements and projects"
+            ],
+            "Cultural_Fit_Agent": [
+                f"🤝 Analyzing cultural alignment indicators across {total_resumes} profile(s)",
+                f"💭 Evaluating communication style and collaboration signals",
+                f"🌟 Assessing leadership potential and team dynamics",
+                f"🎯 Reviewing personality traits and work style indicators"
+            ],
+            "Leadership_Assessment_Agent": [
+                f"👑 Evaluating leadership experience in {total_resumes} candidate(s)",
+                f"📊 Analyzing team management and project leadership",
+                f"🚀 Assessing strategic thinking and decision-making",
+                f"🌟 Reviewing mentoring and development capabilities"
+            ],
+            "Technical_Depth_Agent": [
+                f"🔬 Deep-diving into technical expertise across {total_resumes} resume(s)",
+                f"⚡ Analyzing system architecture and design experience",
+                f"🧪 Evaluating problem-solving and debugging skills",
+                f"🔧 Assessing code quality and best practices knowledge"
+            ]
+        }
+        
+        # Get activities for this agent, default to generic if not found
+        agent_activities = activities.get(agent_name, [
+            f"🔍 Analyzing candidate profiles for {total_resumes} resume(s)",
+            f"📊 Evaluating qualifications and requirements",
+            f"🎯 Assessing job-candidate alignment",
+            f"📈 Generating detailed analysis insights"
+        ])
+        
+        # Return activity based on round number (cycle through activities)
+        activity_index = (round_num - 1) % len(agent_activities)
+        return agent_activities[activity_index]
     
     # Create screening context
     screening_input = f"""
@@ -191,19 +273,29 @@ async def main_screening(job_profile, resumes, num_agents, max_interactions=10):
     
     progress_bar = st.progress(0)
     status_text = st.empty()
+    detailed_status = st.empty()
     
     with st.spinner("🔍 Screening resumes..."):
         while not is_complete and interactions < max_interactions:
-            # Update agent status
+            # Update agent status with detailed activity
             current_agent = expert_agents_names[interactions % len(expert_agents_names)]
-            agent_status[current_agent] = f"🔍 Working on analysis... (Round {interactions + 1})"
+            current_round = interactions + 1
+            
+            # Get detailed activity for this agent
+            current_activity = get_agent_activity(current_agent, current_round, len(resumes))
+            
+            agent_status[current_agent] = f"🔍 {current_activity.split(' ', 1)[1]}"  # Remove emoji from activity
+            specialization = agent_specializations.get(current_agent, "🔍 General Analysis")
             agent_placeholders[current_agent].markdown(
-                f'<div class="agent-status">👤 <strong>{current_agent}</strong><br>{agent_status[current_agent]}</div>', 
+                f'<div class="agent-status">👤 <strong>{current_agent}</strong><br><small>{specialization}</small><br>🔍 {current_activity.split(" ", 1)[1]}</div>', 
                 unsafe_allow_html=True
             )
             
-            status_text.text(f"Step {interactions + 1}/{max_interactions}: {current_agent} is analyzing...")
-            progress_bar.progress((interactions + 1) / max_interactions)
+            # Update main status with detailed information
+            phase = "Initial Analysis" if current_round <= max_interactions // 2 else "Deep Analysis & Validation"
+            status_text.markdown(f"**Round {current_round}/{max_interactions}** | **{current_agent}** | {len(expert_agents)} agents total | *{phase}*")
+            detailed_status.info(f"🎯 {current_activity}")
+            progress_bar.progress(current_round / max_interactions)
             
             await group.add_chat_message(ChatMessageContent(role=AuthorRole.USER, content=screening_input))
 
@@ -216,16 +308,18 @@ async def main_screening(job_profile, resumes, num_agents, max_interactions=10):
             interactions += 1
             await asyncio.sleep(1)
     
-    # Update final status
+    # Update final status with completion summary
     for agent_name in expert_agents_names:
-        agent_status[agent_name] = "✅ Analysis Complete"
+        agent_status[agent_name] = "✅ Analysis Complete - Ready for results compilation"
+        specialization = agent_specializations.get(agent_name, "🔍 General Analysis")
         agent_placeholders[agent_name].markdown(
-            f'<div class="agent-status">👤 <strong>{agent_name}</strong><br>{agent_status[agent_name]}</div>', 
+            f'<div class="agent-status">👤 <strong>{agent_name}</strong><br><small>{specialization}</small><br>✅ Analysis Complete</div>', 
             unsafe_allow_html=True
         )
     
     progress_bar.progress(1.0)
-    status_text.text("✅ Resume screening completed!")
+    status_text.markdown("**✅ Resume screening completed!**")
+    detailed_status.success(f"🎉 All {len(expert_agents)} agents have completed their analysis of {len(resumes)} resume(s). Compiling final results...")
 # Streamlit UI for Resume Screening
 def app():
     # Initialize session state variables
@@ -380,16 +474,32 @@ def app():
         
         if uploaded_files_tab2:
             with st.spinner("📖 Processing uploaded resumes..."):
+                st.info(f"🔍 Processing {len(uploaded_files_tab2)} uploaded file(s)...")
                 newly_processed_resumes = process_resume_files(uploaded_files_tab2)
+                st.success(f"✅ Successfully processed {len(newly_processed_resumes)} resume(s) from upload")
+                
                 # Append new resumes to existing ones in session state, avoiding duplicates by filename
                 existing_filenames = {r['filename'] for r in st.session_state.resumes}
+                added_count = 0
                 for res in newly_processed_resumes:
                     if res['filename'] not in existing_filenames:
                         st.session_state.resumes.append(res)
                         existing_filenames.add(res['filename'])
+                        added_count += 1
+                    else:
+                        st.warning(f"⚠️ Skipped duplicate file: {res['filename']}")
+                
+                if added_count > 0:
+                    st.success(f"➕ Added {added_count} new resume(s) to your collection")
             
         if st.session_state.resumes:
             st.success(f"✅ Successfully processed {len(st.session_state.resumes)} resume(s)")
+            
+            # Debug information
+            with st.expander("🔍 Debug Information", expanded=False):
+                st.write("**Current resumes in session state:**")
+                for i, resume in enumerate(st.session_state.resumes):
+                    st.write(f"{i+1}. {resume['filename']} ({len(resume['content'])} chars)")
             
             col_clear, col_space = st.columns([1, 3])
             with col_clear:
@@ -492,8 +602,15 @@ def app():
 
         if resumes_tab4:
             with st.expander(f"Review Resumes ({len(resumes_tab4)})", expanded=False):
+                st.write(f"**Total resumes to be screened: {len(resumes_tab4)}**")
                 for i, resume in enumerate(resumes_tab4):
-                    st.markdown(f"**{i+1}. {resume['filename']}**")
+                    st.markdown(f"**{i+1}. {resume['filename']}** ({len(resume['content'])} characters)")
+                    
+                # Debug section
+                st.write("---")
+                st.write("**Debug Info:**")
+                st.write(f"Session state resumes count: {len(st.session_state.get('resumes', []))}")
+                st.write(f"Local resumes_tab4 count: {len(resumes_tab4)}")
         else:
             st.warning("⚠️ Please upload at least one resume in the 'Resumes' tab.")
 
@@ -527,7 +644,7 @@ def app():
                         st.session_state.running = False
                         
                         # Display results
-                        display_screening_results(screening_results, resumes)
+                        display_screening_results(screening_results, resumes_to_screen)
                         
                     except Exception as e:
                         st.error(f"❌ An error occurred during screening: {str(e)}")

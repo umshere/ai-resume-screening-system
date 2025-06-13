@@ -1,9 +1,16 @@
 import datetime
 import os, json, re
 from jinja2 import Environment, FileSystemLoader
-from openai import AzureOpenAI
+from openai import AzureOpenAI, OpenAI
+import google.generativeai as genai
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
 from semantic_kernel.kernel import Kernel
 from semantic_kernel.connectors.ai.open_ai.services.azure_chat_completion import AzureChatCompletion
+from semantic_kernel.connectors.ai.open_ai.services.open_ai_chat_completion import OpenAIChatCompletion
 from semantic_kernel.agents import AgentGroupChat, ChatCompletionAgent
 from semantic_kernel.agents.strategies.selection.kernel_function_selection_strategy import (
     KernelFunctionSelectionStrategy,
@@ -25,23 +32,155 @@ from semantic_kernel.functions import KernelArguments
 from src.plugins.resume_screening import ResumeScreeningPlugin
 
 
+class GeminiWrapper:
+    """Wrapper class to make Gemini API compatible with OpenAI interface"""
+    
+    def __init__(self, api_key):
+        genai.configure(api_key=api_key)
+        self.chat = GeminiChatCompletions()
+
+
+class GeminiChatCompletions:
+    """Chat completions interface for Gemini"""
+    
+    def __init__(self):
+        self.completions = self
+    
+    def create(self, model, messages, max_tokens=None, max_completion_tokens=None, **kwargs):
+        # Convert OpenAI messages format to Gemini format
+        gemini_model = genai.GenerativeModel(model)
+        
+        # Extract the user message (assuming simple user message for now)
+        user_message = ""
+        system_message = ""
+        
+        for message in messages:
+            if message["role"] == "user":
+                user_message = message["content"]
+            elif message["role"] == "system":
+                system_message = message["content"]
+        
+        # Combine system and user messages for Gemini
+        final_message = f"{system_message}\n\n{user_message}" if system_message else user_message
+        
+        # Generate response
+        try:
+            response = gemini_model.generate_content(final_message)
+            return GeminiResponse(response.text, model)
+        except Exception as e:
+            # If response is blocked, return a default message
+            if "blocked" in str(e).lower():
+                return GeminiResponse("I apologize, but I cannot process this request due to safety guidelines.", model)
+            else:
+                raise e
+
+
+class GeminiResponse:
+    """Response wrapper to match OpenAI response format"""
+    
+    def __init__(self, text, model):
+        self.choices = [GeminiChoice(text)]
+        self.model = model
+    
+    def model_dump_json(self):
+        return json.dumps({
+            "choices": [{"message": {"content": self.choices[0].message.content}}]
+        })
+
+
+class GeminiChoice:
+    """Choice wrapper for Gemini response"""
+    
+    def __init__(self, text):
+        self.message = GeminiMessage(text)
+
+
+class GeminiMessage:
+    """Message wrapper for Gemini response"""
+    
+    def __init__(self, text):
+        self.content = text
+
+
+def get_ai_service_config():
+    """
+    Determine which AI service to use based on AI_SERVICE environment variable.
+    Returns a tuple of (service_type, client, model_name, model_orchestrator)
+    """
+    ai_service = os.getenv("AI_SERVICE", "").lower()
+    
+    if ai_service == "azure":
+        # Azure OpenAI Configuration
+        azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+        azure_api_key = os.getenv("AZURE_OPENAI_API_KEY")
+        azure_model = os.getenv("AZURE_OPENAI_MODEL", "gpt-4o-mini")
+        azure_model_orchestrator = os.getenv("AZURE_OPENAI_MODEL_ORCHESTRATOR", "gpt-4o-mini")
+        
+        if not azure_endpoint or not azure_api_key or azure_api_key == "your-azure-openai-api-key-here":
+            raise ValueError("Azure OpenAI selected but credentials are missing. Please check AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY in .env file.")
+        
+        try:
+            client = AzureOpenAI(
+                azure_endpoint=azure_endpoint,
+                api_key=azure_api_key,
+                api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview")
+            )
+            print(f"✅ Using Azure OpenAI with model: {azure_model_orchestrator}")
+            return ("azure", client, azure_model, azure_model_orchestrator)
+        except Exception as e:
+            raise ValueError(f"Failed to initialize Azure OpenAI: {str(e)}")
+    
+    elif ai_service == "openai":
+        # OpenAI Configuration
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        openai_model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        openai_model_orchestrator = os.getenv("OPENAI_MODEL_ORCHESTRATOR", "gpt-4o-mini")
+        
+        if not openai_api_key or openai_api_key == "sk-your-openai-api-key-here":
+            raise ValueError("OpenAI selected but API key is missing. Please check OPENAI_API_KEY in .env file.")
+        
+        try:
+            client = OpenAI(api_key=openai_api_key)
+            print(f"✅ Using OpenAI with model: {openai_model_orchestrator}")
+            return ("openai", client, openai_model, openai_model_orchestrator)
+        except Exception as e:
+            raise ValueError(f"Failed to initialize OpenAI: {str(e)}")
+    
+    elif ai_service == "gemini":
+        # Gemini Configuration
+        gemini_api_key = os.getenv("GEMINI_API_KEY")
+        gemini_model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+        gemini_model_orchestrator = os.getenv("GEMINI_MODEL_ORCHESTRATOR", "gemini-1.5-flash")
+        
+        if not gemini_api_key:
+            raise ValueError("Gemini selected but API key is missing. Please check GEMINI_API_KEY in .env file.")
+        
+        try:
+            client = GeminiWrapper(gemini_api_key)
+            print(f"✅ Using Google Gemini with model: {gemini_model_orchestrator}")
+            return ("gemini", client, gemini_model, gemini_model_orchestrator)
+        except Exception as e:
+            raise ValueError(f"Failed to initialize Gemini: {str(e)}")
+    
+    else:
+        raise ValueError(f"Invalid AI_SERVICE '{ai_service}'. Please set AI_SERVICE to 'azure', 'openai', or 'gemini' in your .env file.")
+
+
 class Orchestrator:
 
     def __init__(self, screening_context, num_agents):
-        self.client = AzureOpenAI(
-            azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-            api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-            api_version="2024-12-01-preview"
-        )
-
+        self.service_type, self.client, self.model, self.model_orchestrator = get_ai_service_config()
+        
         self.env = Environment(loader=FileSystemLoader(os.getenv('TEMPLATE_DIR_PROMPTS')))
         self.template = self.env.get_template(os.getenv('TEMPLATE_SYSTEM_ORCHESTRATOR'))
         self.screening_context = screening_context
         self.num_agents = num_agents
+        
+        print(f"Using {self.service_type.upper()} service with model: {self.model_orchestrator}")
 
     def get_response(self):
         response = self.client.chat.completions.create(
-            model=os.getenv("AZURE_OPENAI_MODEL_ORCHESTRATOR"),
+            model=self.model_orchestrator,
             messages=[
                 {"role": "user", "content": self.template.render(
                     job_profile=self.screening_context['job_profile'],
@@ -87,25 +226,65 @@ class ApprovalTerminationStrategy(KernelFunctionTerminationStrategy):
 
 class MultiAgent:
     def __init__(self):
-        self.model = os.getenv("AZURE_OPENAI_MODEL")
-        self.bing_connector = BingConnector(os.getenv("BING_API_KEY"))
+        self.service_type, self.client, self.model, self.model_orchestrator = get_ai_service_config()
+        
+        # Initialize Bing connector only if API key is available
+        bing_api_key = os.getenv("BING_API_KEY")
+        if bing_api_key and bing_api_key != "your-bing-api-key-here":
+            try:
+                self.bing_connector = BingConnector(bing_api_key)
+                self.has_bing = True
+                print("✅ Bing Search enabled")
+            except Exception as e:
+                print(f"⚠️ Bing Search disabled: {str(e)}")
+                self.bing_connector = None
+                self.has_bing = False
+        else:
+            print("⚠️ Bing Search disabled: No API key provided")
+            self.bing_connector = None
+            self.has_bing = False
+        
         self.env = Environment(loader=FileSystemLoader(os.getenv('TEMPLATE_DIR_PROMPTS')))
         self.template_termination = self.env.get_template(os.getenv('TEMPLATE_TERMINATION'))
         self.template_selection = self.env.get_template(os.getenv('TEMPLATE_SELECTION'))
     
-    @staticmethod
-    def _create_kernel_with_chat_completion(service_id: str, deployment_name: str) -> Kernel:
+    def _create_kernel_with_chat_completion(self, service_id: str, deployment_name: str) -> Kernel:
         kernel = Kernel()
-        kernel.add_service(AzureChatCompletion(service_id=service_id, 
-                                               deployment_name=deployment_name))
+        if self.service_type == "azure":
+            kernel.add_service(AzureChatCompletion(service_id=service_id, 
+                                                   deployment_name=deployment_name))
+        elif self.service_type == "openai":
+            kernel.add_service(OpenAIChatCompletion(service_id=service_id, 
+                                                    ai_model_id=deployment_name))
+        else:  # Gemini - create a minimal kernel without chat completion service
+            # For Gemini, we'll use a simplified approach that doesn't require OpenAI
+            # We'll handle the chat completion directly with Gemini API
+            pass  # Don't add any chat completion service for Gemini
         return kernel
     
-    @staticmethod
-    def _standardize_string(input_string: str) -> str:
+    def _standardize_string(self, input_string: str) -> str:
         return re.sub(r'[^0-9A-Za-z_-]', '_', input_string)
     
     def create_agents(self, dynamic_agents):
         expert_agents = []
+        
+        if self.service_type == "gemini":
+            # For Gemini, create proper agent objects
+            for agent in dynamic_agents:
+                agent_name = self._standardize_string(agent['name'])
+                # Create a proper GeminiAgent object
+                expert_agent = GeminiAgent(
+                    agent_id=agent_name,
+                    name=agent_name,
+                    instructions=agent['system_prompt'],
+                    client=self.client,
+                    model=self.model
+                )
+                expert_agents.append(expert_agent)
+                print(f"Created Gemini agent: {agent_name}")
+            return expert_agents
+        
+        # For Azure/OpenAI, use the existing Semantic Kernel approach
         for agent in dynamic_agents:
 
             agent_name = self._standardize_string(agent['name'])
@@ -115,7 +294,10 @@ class MultiAgent:
             settings = kernel.get_prompt_execution_settings_from_service_id(service_id=agent_name)
             settings.function_choice_behavior = FunctionChoiceBehavior.Auto()
 
-            kernel.add_plugin(WebSearchEnginePlugin(BingConnector()), "WebSearch")
+            # Add WebSearch plugin only if Bing is available
+            if self.has_bing:
+                kernel.add_plugin(WebSearchEnginePlugin(self.bing_connector), "WebSearch")
+            
             kernel.add_plugin(ResumeScreeningPlugin(), "ResumeScreening")
            
             expert = ChatCompletionAgent(id=agent_name,
@@ -130,9 +312,18 @@ class MultiAgent:
         return expert_agents
     
     def create_selection_function(self, expert_agents):
-        selection_function = KernelFunctionFromPrompt(function_name="selection",
-                                                      prompt=self.template_selection.render(expert_agents=expert_agents,
-                                                                                            history=f"{{{{$history}}}}"))
+        if self.service_type == "gemini":
+            # For Gemini, we'll use a simplified selection approach
+            # Convert agent objects to names for the template
+            agent_names = [agent.name for agent in expert_agents]
+            selection_function = KernelFunctionFromPrompt(function_name="selection",
+                                                          prompt=self.template_selection.render(expert_agents=agent_names,
+                                                                                                history=f"{{{{$history}}}}"))
+        else:
+            # For Azure/OpenAI, use the existing approach
+            selection_function = KernelFunctionFromPrompt(function_name="selection",
+                                                          prompt=self.template_selection.render(expert_agents=expert_agents,
+                                                                                                history=f"{{{{$history}}}}"))
         return selection_function
     
     def create_termination_function(self, termination_keyword):
@@ -143,6 +334,11 @@ class MultiAgent:
         return selection_function
 
     def create_chat_group(self, expert_agents, selection_function, termination_function, termination_keyword):
+        if self.service_type == "gemini":
+            # For Gemini, create a simplified chat group that doesn't use Semantic Kernel
+            return GeminiChatGroup(expert_agents, termination_keyword)
+        
+        # For Azure/OpenAI, use the existing Semantic Kernel approach
         group = AgentGroupChat(agents=expert_agents,
                                selection_strategy=KernelFunctionSelectionStrategy(
                                     function=selection_function,
@@ -188,3 +384,91 @@ class MultiAgent:
             return auth_token.token
         
         return auth_callback
+
+
+class GeminiAgent:
+    """Simple agent class for Gemini"""
+    
+    def __init__(self, agent_id, name, instructions, client, model):
+        self.id = agent_id
+        self.name = name
+        self.instructions = instructions
+        self.client = client
+        self.model = model
+
+
+class GeminiChatGroup:
+    """Simplified chat group for Gemini agents"""
+    
+    def __init__(self, agents, termination_keyword):
+        self.agents = agents
+        self.termination_keyword = termination_keyword
+        self.is_complete = False
+        self.history = []
+    
+    async def add_chat_message(self, message):
+        """Add a message to the chat history"""
+        self.history.append(message)
+    
+    async def invoke(self):
+        """Invoke the chat group to process messages"""
+        if not self.history:
+            return
+        
+        # Get the last message
+        last_message = self.history[-1]
+        
+        # Process with each agent
+        for agent in self.agents:
+            # Create a prompt combining the agent's instructions with the user message
+            prompt = f"""
+            You are {agent.name}. Your role: {agent.instructions}
+            
+            User request: {last_message.content}
+            
+            Please provide your analysis and recommendations based on your role.
+            """
+            
+            try:
+                # Generate response using Gemini
+                response = agent.client.chat.completions.create(
+                    model=agent.model,
+                    messages=[{"role": "user", "content": prompt}],
+                    max_completion_tokens=1000
+                )
+                
+                # Parse the response
+                response_text = response.choices[0].message.content
+                
+                # Create a mock response object similar to Semantic Kernel's format
+                mock_response = type('MockResponse', (), {
+                    'role': 'assistant',
+                    'name': agent.name,
+                    'content': response_text
+                })()
+                
+                yield mock_response
+                
+                # Check for termination
+                if self.termination_keyword.lower() in response_text.lower():
+                    self.is_complete = True
+                    break
+                    
+            except Exception as e:
+                # Handle errors gracefully
+                error_response = type('ErrorResponse', (), {
+                    'role': 'assistant',
+                    'name': agent.name,
+                    'content': f"I apologize, but I encountered an error while processing your request: {str(e)}"
+                })()
+                yield error_response
+    
+    async def invoke_stream(self):
+        """Streaming version of invoke - alias for invoke since we already yield responses"""
+        async for response in self.invoke():
+            yield response
+    
+    async def reset(self):
+        """Reset the chat group"""
+        self.history = []
+        self.is_complete = False
