@@ -1,22 +1,19 @@
-import asyncio, os
-from semantic_kernel.contents.chat_message_content import ChatMessageContent
-from semantic_kernel.contents.utils.author_role import AuthorRole
-from src.mas import MultiAgent, Orchestrator
+"""
+AI Multi-Agent Resume Screening & Matching System
+Main entry point - run the Streamlit application
+"""
 
+import os
+import sys
 
-async def run(user_input):
-    # Create the orchestrator
-    orchestrator = Orchestrator(user_input)
-    dynamic_agents = orchestrator.run()
+# Add current directory to Python path
+sys.path.append(os.path.dirname(__file__))
 
-    mas = MultiAgent()
-
-    # Create agents
-    expert_agents = mas.create_agents(dynamic_agents)
-    expert_agents_names = [agent.name for agent in expert_agents]
-
-    # Create selection function
-    selection_function = mas.create_selection_function(expert_agents_names)
+if __name__ == "__main__":
+    # Run the Streamlit app
+    import streamlit.web.cli as stcli
+    sys.argv = ["streamlit", "run", "app.py"]
+    sys.exit(stcli.main())
 
     # Create the termination function
     termination_keyword = 'yes'
