@@ -228,19 +228,67 @@ async def main_screening(job_profile, resumes, num_agents, max_interactions=10):
     status_text.text("✅ Resume screening completed!")
 # Streamlit UI for Resume Screening
 def app():
+    # Initialize session state variables
+    if 'job_profile' not in st.session_state:
+        st.session_state.job_profile = ""
+    if 'resumes' not in st.session_state:
+        st.session_state.resumes = []
+    if 'num_agents' not in st.session_state:
+        st.session_state.num_agents = 4
+    if 'analysis_depth' not in st.session_state:
+        st.session_state.analysis_depth = "Standard Analysis"
+    if 'running' not in st.session_state:
+        st.session_state.running = False
+    if 'screening_results' not in st.session_state:
+        st.session_state.screening_results = None
+
     st.title("📋 AI Resume Screening & Matching System 📋")
     st.subheader("Intelligent resume screening with AI expert agents")
     
-    # Initialize session state
-    if 'screening_results' not in st.session_state:
-        st.session_state.screening_results = None
-    if 'running' not in st.session_state:
-        st.session_state.running = False
+    # Progress indicator
+    progress_steps = ["Job Profile", "Resumes", "Configuration", "Review & Start"]
+    completed_steps = []
     
-    # Create two main columns
-    col1, col2 = st.columns([1, 1])
+    if st.session_state.job_profile.strip():
+        completed_steps.append("Job Profile")
+    if st.session_state.resumes:
+        completed_steps.append("Resumes")
+    if st.session_state.num_agents >= 2:
+        completed_steps.append("Configuration")
     
+    # Progress bar
+    progress_value = len(completed_steps) / len(progress_steps)
+    st.progress(progress_value, text=f"Setup Progress: {len(completed_steps)}/{len(progress_steps)} steps completed")
+    
+    # Progress indicators row
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
+        status = "✅" if "Job Profile" in completed_steps else "⭕"
+        st.markdown(f"**{status} Job Profile**")
+    with col2:
+        status = "✅" if "Resumes" in completed_steps else "⭕"
+        st.markdown(f"**{status} Resumes**")
+    with col3:
+        status = "✅" if "Configuration" in completed_steps else "⭕"
+        st.markdown(f"**{status} Configuration**")
+    with col4:
+        status = "✅" if len(completed_steps) == 4 else "⭕"
+        st.markdown(f"**{status} Ready to Start**")
+    
+    st.markdown("---")
+    
+    # Tab-based wizard flow with enhanced titles
+    tab_titles = [
+        f"📝 Job Profile {'✅' if 'Job Profile' in completed_steps else ''}",
+        f"📄 Resumes {'✅' if 'Resumes' in completed_steps else ''}",
+        f"⚙️ Configuration {'✅' if 'Configuration' in completed_steps else ''}",
+        f"🚀 Review & Start {'✅' if len(completed_steps) == 4 else ''}"
+    ]
+    
+    tab1, tab2, tab3, tab4 = st.tabs(tab_titles)
+
+    with tab1:
+        # Job Profile section
         st.markdown("### 📝 Job Profile")
         
         # Job profile input options
@@ -250,14 +298,24 @@ def app():
             horizontal=True
         )
         
-        job_profile = ""
         if job_input_method == "📝 Direct Text Input":
-            job_profile = st.text_area(
+            job_profile_input = st.text_area(
                 "Enter the job description:",
+                value=st.session_state.job_profile,
                 height=300,
-                placeholder="Paste the complete job description here including requirements, skills, experience, etc.",
-                help="Provide detailed job requirements for accurate matching"
+                placeholder="Example: Senior Software Engineer position requiring 5+ years experience in Python, React, and cloud technologies. Must have experience with microservices architecture...",
+                help="💡 Tip: Include specific skills, experience requirements, and qualifications for better matching accuracy"
             )
+            
+            # Character counter and validation
+            char_count = len(job_profile_input)
+            if char_count > 0:
+                if char_count < 100:
+                    st.warning(f"📝 {char_count} characters - Consider adding more details for better analysis")
+                else:
+                    st.success(f"✅ {char_count} characters - Good job description length!")
+            
+            st.session_state.job_profile = job_profile_input
         else:
             job_url = st.text_input(
                 "Enter job posting URL:",
@@ -267,95 +325,219 @@ def app():
             if job_url:
                 st.info("URL processing will be implemented to extract job details")
                 # TODO: Implement URL processing
-                job_profile = "URL processing feature coming soon. Please use direct text input for now."
-    
-    with col2:
+                st.session_state.job_profile = "URL processing feature coming soon. Please use direct text input for now."
+
+        # Show resume status with enhanced styling
+        if st.session_state.resumes:
+            st.markdown(
+                f"""
+                <div style="
+                    background-color: #d4edda; 
+                    border: 1px solid #c3e6cb; 
+                    border-radius: 8px; 
+                    padding: 15px; 
+                    margin: 10px 0;
+                ">
+                    <h4 style="color: #155724; margin: 0;">✅ Resume Upload Complete</h4>
+                    <p style="color: #155724; margin: 5px 0 0 0;">
+                        {len(st.session_state.resumes)} resume(s) successfully processed. 
+                        You can manage them in the 'Resumes' tab.
+                    </p>
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                """
+                <div style="
+                    background-color: #fff3cd; 
+                    border: 1px solid #ffeaa7; 
+                    border-radius: 8px; 
+                    padding: 15px; 
+                    margin: 10px 0;
+                ">
+                    <h4 style="color: #856404; margin: 0;">📄 Next Step: Upload Resumes</h4>
+                    <p style="color: #856404; margin: 5px 0 0 0;">
+                        Navigate to the 'Resumes' tab to upload candidate files for screening.
+                    </p>
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
+
+
+    with tab2:
+        # Resumes section (for detailed file management)
         st.markdown("### 📄 Resumes")
-        
-        # Resume upload
-        uploaded_files = st.file_uploader(
-            "Upload resume files",
+        uploaded_files_tab2 = st.file_uploader( # Changed variable name for clarity
+            "Upload resume files here:", # Slightly different label
             type=['pdf', 'docx', 'txt'],
             accept_multiple_files=True,
-            help="Support for PDF, DOCX, and TXT files. You can upload multiple resumes at once."
+            help="Support for PDF, DOCX, and TXT files. You can upload multiple resumes at once.",
+            key="resume_uploader_tab2"  # Unique key for this file_uploader
         )
         
-        resumes = []
-        if uploaded_files:
+        if uploaded_files_tab2:
             with st.spinner("📖 Processing uploaded resumes..."):
-                resumes = process_resume_files(uploaded_files)
+                newly_processed_resumes = process_resume_files(uploaded_files_tab2)
+                # Append new resumes to existing ones in session state, avoiding duplicates by filename
+                existing_filenames = {r['filename'] for r in st.session_state.resumes}
+                for res in newly_processed_resumes:
+                    if res['filename'] not in existing_filenames:
+                        st.session_state.resumes.append(res)
+                        existing_filenames.add(res['filename'])
             
-            if resumes:
-                st.success(f"✅ Successfully processed {len(resumes)} resume(s)")
-                with st.expander("📋 Preview processed resumes"):
-                    for i, resume in enumerate(resumes):
-                        st.markdown(f"**{i+1}. {resume['filename']}**")
-                        st.text(resume['content'][:200] + "..." if len(resume['content']) > 200 else resume['content'])
-                        st.divider()
-    
-    # Agent configuration
-    st.markdown("### ⚙️ Screening Configuration")
-    col_config1, col_config2 = st.columns([1, 1])
-    
-    with col_config1:
-        num_agents = st.slider(
-            "Number of expert agents",
-            min_value=2,
-            max_value=6,
-            value=4,
-            help="More agents provide more detailed analysis but take longer"
-        )
-    
-    with col_config2:
-        analysis_depth = st.selectbox(
-            "Analysis depth",
-            ["Quick Overview", "Standard Analysis", "Deep Dive"],
-            index=1,
-            help="Choose the level of analysis detail"
-        )
-    
-    # Start screening button
-    st.markdown("### 🚀 Start Screening")
-    
-    can_start = job_profile.strip() and resumes
-    if not can_start:
-        if not job_profile.strip():
-            st.warning("⚠️ Please provide a job profile")
-        if not resumes:
-            st.warning("⚠️ Please upload at least one resume")
-    
-    if st.button(
-        '🔍 Start Resume Screening',
-        disabled=not can_start or st.session_state.running,
-        type="primary",
-        use_container_width=True
-    ):
-        if can_start:
-            st.session_state.running = True
-            with st.container():
-                st.markdown("---")
-                st.markdown("### 📊 Screening Progress")
-                
-                # Run the screening process
-                try:
-                    screening_results = asyncio.run(
-                        main_screening(job_profile, resumes, num_agents)
+        if st.session_state.resumes:
+            st.success(f"✅ Successfully processed {len(st.session_state.resumes)} resume(s)")
+            
+            col_clear, col_space = st.columns([1, 3])
+            with col_clear:
+                if st.button("🗑️ Clear All Resumes", help="Remove all uploaded files and start over", key="clear_resumes_button"):
+                    st.session_state.resumes = []
+                    st.rerun()
+            
+            # Enhanced resume preview with file info
+            with st.expander(f"📋 Preview Resumes ({len(st.session_state.resumes)})", expanded=False):
+                for i, resume in enumerate(st.session_state.resumes):
+                    # File info header
+                    file_extension = resume['filename'].split('.')[-1].upper()
+                    file_size = f"{len(resume['content'])} chars"
+                    
+                    col_info, col_remove = st.columns([4, 1])
+                    with col_info:
+                        st.markdown(f"**📄 {i+1}. {resume['filename']}** (`{file_extension}` • {file_size})")
+                    with col_remove:
+                        if st.button("❌", key=f"remove_{i}", help=f"Remove {resume['filename']}"):
+                            st.session_state.resumes.pop(i)
+                            st.rerun()
+                    
+                    # Content preview
+                    preview_text = resume['content'][:300] + "..." if len(resume['content']) > 300 else resume['content']
+                    st.text_area(
+                        f"Content preview:",
+                        value=preview_text,
+                        height=100,
+                        disabled=True,
+                        key=f"preview_{i}"
                     )
-                    st.session_state.screening_results = screening_results
-                    st.session_state.running = False
+                    if i < len(st.session_state.resumes) - 1:
+                        st.divider()
+            # Clear the uploader after processing to prevent re-processing on rerun if files are not changed by user
+            # This is a common pattern but might need adjustment based on desired UX
+            # For now, let's rely on session state to manage the list of resumes.
+
+    with tab3:
+        # Screening Configuration section
+        st.markdown("### ⚙️ Screening Configuration")
+        st.markdown("Configure the AI agents and analysis depth for optimal screening results.")
+        
+        col_config1, col_config2 = st.columns([1, 1])
+        
+        with col_config1:
+            st.markdown("**👥 Expert Agents**")
+            num_agents = st.number_input(
+                "Number of expert agents",
+                min_value=2,
+                max_value=6,
+                value=st.session_state.num_agents,
+                step=1,
+                help="💡 More agents provide more detailed analysis but take longer to complete"
+            )
+            st.session_state.num_agents = num_agents
+            
+            # Agent explanation
+            agent_descriptions = {
+                2: "Basic analysis with 2 core agents",
+                3: "Balanced analysis with 3 specialized agents", 
+                4: "Comprehensive analysis with 4 expert agents (Recommended)",
+                5: "Detailed analysis with 5 specialized agents",
+                6: "Maximum analysis with 6 expert agents"
+            }
+            st.info(f"🤖 {agent_descriptions.get(num_agents, 'Custom configuration')}")
+            
+        with col_config2:
+            st.markdown("**🔍 Analysis Depth**")
+            analysis_depth = st.selectbox(
+                "Analysis depth",
+                ["Quick Overview", "Standard Analysis", "Deep Dive"],
+                index=["Quick Overview", "Standard Analysis", "Deep Dive"].index(st.session_state.analysis_depth),
+                help="Choose the level of detail for resume analysis"
+            )
+            st.session_state.analysis_depth = analysis_depth
+            
+            # Depth explanation
+            depth_descriptions = {
+                "Quick Overview": "⚡ Fast screening with key highlights",
+                "Standard Analysis": "⚖️ Balanced analysis with detailed insights", 
+                "Deep Dive": "🔬 Comprehensive analysis with detailed explanations"
+            }
+            st.info(depth_descriptions[analysis_depth])
+
+    with tab4:
+        # Review inputs and final Start Screening button
+        st.markdown("### 🚀 Review & Start Screening")
+        # Ensure job_profile is initialized, e.g., from session_state or set to empty string
+        job_profile_tab4 = st.session_state.get('job_profile', "") # Get from session_state or default
+        resumes_tab4 = st.session_state.get('resumes', []) # Get from session_state or default
+
+        can_start = job_profile_tab4.strip() and resumes_tab4
+        
+        # Display a summary of what will be screened
+        if job_profile_tab4.strip():
+            with st.expander("Review Job Profile", expanded=False):
+                st.text_area("Job Profile:", value=job_profile_tab4, height=150, disabled=True, key="review_job_profile")
+        else:
+            st.warning("⚠️ Please provide a job profile in the 'Job Profile' tab.")
+
+        if resumes_tab4:
+            with st.expander(f"Review Resumes ({len(resumes_tab4)})", expanded=False):
+                for i, resume in enumerate(resumes_tab4):
+                    st.markdown(f"**{i+1}. {resume['filename']}**")
+        else:
+            st.warning("⚠️ Please upload at least one resume in the 'Resumes' tab.")
+
+        if st.button(
+            '🔍 Start Resume Screening',
+            disabled=not can_start or st.session_state.get('running', False),
+            type="primary",
+            use_container_width=True,
+            key="start_screening_button_tab4" # Added key
+        ):
+            if can_start:
+                st.session_state.running = True
+                # ... rest of your screening logic ...
+                # Ensure job_profile and resumes are correctly passed to main_screening
+                # For example, by retrieving them from session_state if they are stored there
+                # or by ensuring they are correctly scoped from the tabs.
+                
+                # Assuming job_profile and resumes are updated in session_state from their respective tabs
+                job_profile_to_screen = st.session_state.get('job_profile', "")
+                resumes_to_screen = st.session_state.get('resumes', [])
+
+                with st.container():
+                    st.markdown("---")
+                    st.markdown("### 📊 Screening Progress")
                     
-                    # Display results
-                    display_screening_results(screening_results, resumes)
-                    
-                except Exception as e:
-                    st.error(f"❌ An error occurred during screening: {str(e)}")
-                    st.session_state.running = False
+                    try:
+                        screening_results = asyncio.run(
+                            main_screening(job_profile_to_screen, resumes_to_screen, st.session_state.get('num_agents', 4)) # Ensure num_agents is also available
+                        )
+                        st.session_state.screening_results = screening_results
+                        st.session_state.running = False
+                        
+                        # Display results
+                        display_screening_results(screening_results, resumes)
+                        
+                    except Exception as e:
+                        st.error(f"❌ An error occurred during screening: {str(e)}")
+                        st.session_state.running = False
     
     # Display previous results if available
-    if st.session_state.screening_results and not st.session_state.running:
+    if st.session_state.get('screening_results') and not st.session_state.get('running', False):
         st.markdown("---")
         st.markdown("### 📊 Latest Screening Results")
-        display_screening_results(st.session_state.screening_results, resumes)
+        display_screening_results(st.session_state.screening_results, st.session_state.get('resumes', []))
 
 def display_screening_results(results, resumes):
     """Display the screening results in an organized format"""
