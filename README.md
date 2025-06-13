@@ -212,15 +212,16 @@ Sidebar Agent Card:
 ### Prerequisites
 
 - Python 3.10+
-- **One of the following AI service API keys:**
+- **One of the following AI service options:**
   - **Azure OpenAI API Key** (Microsoft's hosted OpenAI service)
   - **OpenAI API Key** (Direct OpenAI API access)
   - **Google Gemini API Key** (Google's AI service - **recommended for cost efficiency**)
+  - **Local LLM Server** (Your own AI model running locally - **zero cost**)
 - Bing API Key (optional, for web search capabilities)
 
 ### AI Service Options
 
-This system supports **three AI services** - choose the one that best fits your needs:
+This system supports **four AI services** - choose the one that best fits your needs:
 
 #### 🌟 **Google Gemini (Recommended)**
 
@@ -240,6 +241,13 @@ This system supports **three AI services** - choose the one that best fits your 
 - **Direct access** to OpenAI's latest models
 - **Simple API setup**
 - **Requires OpenAI account**
+
+#### 🏠 **Local LLM (Zero Cost)**
+
+- **Completely free** - runs on your hardware
+- **Full privacy** - data never leaves your machine
+- **Works with** LM Studio, Ollama, or any OpenAI-compatible server
+- **No internet required** once models are downloaded
 
 ### Installation
 
@@ -270,6 +278,13 @@ This system supports **three AI services** - choose the one that best fits your 
    ```
 
 4. Set up environment variables:
+
+   **Quick Setup (Recommended):**
+   ```sh
+   ./setup.sh
+   ```
+   
+   **Manual Setup:**
    ```sh
    cp .env.example .env
    # Edit .env file with your API keys and configuration
@@ -279,73 +294,43 @@ This system supports **three AI services** - choose the one that best fits your 
 
 The system supports **multiple AI services**. Choose one and configure it in your `.env` file:
 
-#### Option 1: Google Gemini (Recommended for cost efficiency)
-
-```env
-# =============================================================================
-# AI SERVICE SELECTOR - CHOOSE YOUR AI PROVIDER
-# =============================================================================
-# Uncomment ONE of the following lines to select your AI service:
-#
-# For Azure OpenAI (Microsoft's hosted OpenAI service):
-# AI_SERVICE=azure
-#
-# For OpenAI (Direct OpenAI API):
-# AI_SERVICE=openai
-#
-# For Google Gemini (Google's AI service):
-AI_SERVICE=gemini
-
-# =============================================================================
-# GEMINI CONFIGURATION
-# =============================================================================
-# Get your API key from: https://aistudio.google.com/app/apikey
-GEMINI_API_KEY=your-gemini-api-key-here
-GEMINI_MODEL=gemini-1.5-flash
-GEMINI_MODEL_ORCHESTRATOR=gemini-1.5-flash
-
-# Template Configuration
-TEMPLATE_DIR_PROMPTS=src/prompts
-TEMPLATE_SYSTEM_ORCHESTRATOR=orchestrator.jinja
-TEMPLATE_TERMINATION=termination.jinja
-TEMPLATE_SELECTION=selection.jinja
-
-# =============================================================================
-# BING SEARCH CONFIGURATION (OPTIONAL)
-# =============================================================================
-# Uncomment and configure this if you want web search capabilities
-# BING_API_KEY=your-bing-api-key-here
+**Quick Setup**: Copy the example file and edit with your preferences:
+```sh
+cp .env.example .env
+# Edit .env file with your chosen AI service and credentials
 ```
 
-#### Option 2: Azure OpenAI
+#### 🌟 **Option 1: Google Gemini (Recommended)**
 
 ```env
-# AI SERVICE SELECTOR
-AI_SERVICE=azure
+AI_SERVICE=gemini
+GEMINI_API_KEY=your-actual-gemini-api-key-here
+```
 
-# AZURE OPENAI CONFIGURATION
+#### 🏠 **Option 2: Local LLM (Zero Cost)**
+
+```env
+AI_SERVICE=local
+LOCAL_LLM_BASE_URL=http://localhost:1234/v1
+LOCAL_LLM_MODEL=your-model-name
+```
+
+#### 🔷 **Option 3: Azure OpenAI**
+
+```env
+AI_SERVICE=azure
 AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com/
 AZURE_OPENAI_API_KEY=your-azure-openai-api-key-here
-AZURE_OPENAI_MODEL=gpt-4o-mini
-AZURE_OPENAI_MODEL_ORCHESTRATOR=gpt-4o-mini
-AZURE_OPENAI_API_VERSION=2024-12-01-preview
-
-# Other configurations same as above...
 ```
 
-#### Option 3: OpenAI Direct
+#### 🔸 **Option 4: OpenAI Direct**
 
 ```env
-# AI SERVICE SELECTOR
 AI_SERVICE=openai
-
-# OPENAI CONFIGURATION
 OPENAI_API_KEY=sk-your-openai-api-key-here
-OPENAI_MODEL=gpt-4o-mini
-OPENAI_MODEL_ORCHESTRATOR=gpt-4o-mini
-
-# Other configurations same as above...
 ```
+
+💡 **See `.env.example` for complete configuration options and detailed comments.**
 
 ### Quick Setup Guide
 
@@ -372,6 +357,35 @@ OPENAI_MODEL_ORCHESTRATOR=gpt-4o-mini
 1. **Create OpenAI account** at [OpenAI Platform](https://platform.openai.com)
 2. **Generate API key** in your dashboard
 3. **Add to .env file** with `AI_SERVICE=openai`
+
+#### 🏠 **Local LLM Setup (Zero Cost)**
+
+1. **Install a local LLM server** (choose one):
+
+   - **LM Studio**: [lmstudio.ai](https://lmstudio.ai) - Easy GUI interface
+   - **Ollama**: [ollama.ai](https://ollama.ai) - Command line tool
+   - **Text Generation WebUI**: Advanced option for power users
+
+2. **Download a model** (recommended models):
+
+   - **Gemma 2 2B/9B**: Fast and efficient
+   - **Llama 3.1 8B**: High quality responses
+   - **Mistral 7B**: Good balance of speed and quality
+
+3. **Start the server** on `http://localhost:1234` (default for LM Studio)
+
+4. **Configure .env file**:
+
+   ```env
+   AI_SERVICE=local
+   LOCAL_LLM_BASE_URL=http://localhost:1234/v1
+   LOCAL_LLM_MODEL=your-model-name
+   ```
+
+5. **Test connection**:
+   ```sh
+   python test_local_llm.py
+   ```
 
 ### Usage
 
@@ -481,8 +495,8 @@ python test_system.py
 ```
 
 3. Set up your environment variables:
-   - Copy to and fill in your API keys and other configurations.
-   - You can use the [.env.sample](.env.sample) file to adjust your own environment variables. Rename the file to `.env` and change each one with your own data.
+   - Copy `.env.example` to `.env` and fill in your API keys and configurations.
+   - You can use the [.env.example](.env.example) file to adjust your own environment variables. Rename the file to `.env` and change each one with your own data.
 
 ### Quickstart
 

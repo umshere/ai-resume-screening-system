@@ -23,7 +23,8 @@ class UsageTracker:
         cost_mapping = {
             "gemini": float(os.getenv("COST_PER_RESUME_GEMINI", "0.03")),
             "openai": float(os.getenv("COST_PER_RESUME_OPENAI", "0.10")),
-            "azure": float(os.getenv("COST_PER_RESUME_AZURE", "0.10"))
+            "azure": float(os.getenv("COST_PER_RESUME_AZURE", "0.10")),
+            "local": float(os.getenv("COST_PER_RESUME_LOCAL", "0.00"))
         }
         self.cost_per_resume = cost_mapping.get(ai_service, 0.05)
         
@@ -285,20 +286,20 @@ def show_usage_stats():
         st.success("✅ Well within budget")
     
     # Total statistics
-    with st.expander("📈 Usage Statistics", expanded=False):
-        st.markdown(f"""
-        **All-Time Statistics:**
-        - Total resumes processed: {analytics['totals']['resumes_processed']:,}
-        - Peak daily cost: ${analytics['totals']['peak_daily_cost']:.2f}
-        - Days active: {analytics['totals']['days_active']}
-        - Current AI service: {os.getenv('AI_SERVICE', 'gemini').upper()}
-        - Cost per resume: ${analytics['limits']['cost_per_resume']:.3f}
-        
-        **Budget Settings:**
-        - Daily limit: ${analytics['limits']['daily_cost_limit']}
-        - Session limit: {analytics['limits']['session_limit']} resumes
-        - Auto-reset: Daily at midnight
-        """)
+    st.markdown("### 📈 Usage Statistics")
+    st.markdown(f"""
+    **All-Time Statistics:**
+    - Total resumes processed: {analytics['totals']['resumes_processed']:,}
+    - Peak daily cost: ${analytics['totals']['peak_daily_cost']:.2f}
+    - Days active: {analytics['totals']['days_active']}
+    - Current AI service: {os.getenv('AI_SERVICE', 'gemini').upper()}
+    - Cost per resume: ${analytics['limits']['cost_per_resume']:.3f}
+    
+    **Budget Settings:**
+    - Daily limit: ${analytics['limits']['daily_cost_limit']}
+    - Session limit: {analytics['limits']['session_limit']} resumes
+    - Auto-reset: Daily at midnight
+    """)
 
 def get_cost_estimate(num_resumes):
     """Get cost estimate for processing resumes"""

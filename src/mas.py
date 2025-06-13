@@ -1,5 +1,6 @@
 import datetime
 import os, json, re
+import requests
 from jinja2 import Environment, FileSystemLoader
 from openai import AzureOpenAI, OpenAI
 import google.generativeai as genai
@@ -102,6 +103,88 @@ class GeminiMessage:
         self.content = text
 
 
+class LocalLLMWrapper:
+    """Wrapper class to make Local LLM API compatible with OpenAI interface"""
+    
+    def __init__(self, base_url="http://localhost:1234/v1"):
+        self.base_url = base_url
+        self.chat = LocalLLMChatCompletions(base_url)
+
+
+class LocalLLMChatCompletions:
+    """Chat completions interface for Local LLM"""
+    
+    def __init__(self, base_url):
+        self.base_url = base_url
+        self.completions = self
+    
+    def create(self, model, messages, max_tokens=None, max_completion_tokens=None, temperature=0.7, **kwargs):
+        """Create a chat completion using the local LLM API"""
+        # Prepare the request payload
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_completion_tokens or max_tokens or 1000,
+            "stream": False
+        }
+        
+        try:
+            # Make request to local LLM server
+            response = requests.post(
+                f"{self.base_url}/chat/completions",
+                headers={"Content-Type": "application/json"},
+                json=payload,
+                timeout=60
+            )
+            
+            if response.status_code == 200:
+                response_data = response.json()
+                return LocalLLMResponse(response_data, model)
+            else:
+                raise Exception(f"Local LLM API error: {response.status_code} - {response.text}")
+                
+        except requests.exceptions.ConnectionError:
+            raise Exception("Could not connect to local LLM server. Make sure it's running on http://localhost:1234")
+        except requests.exceptions.Timeout:
+            raise Exception("Local LLM request timed out. The model might be processing a complex request.")
+        except Exception as e:
+            raise Exception(f"Local LLM API error: {str(e)}")
+
+
+class LocalLLMResponse:
+    """Response wrapper to match OpenAI response format"""
+    
+    def __init__(self, response_data, model):
+        self.choices = [LocalLLMChoice(choice) for choice in response_data.get('choices', [])]
+        self.model = model
+        self.usage = response_data.get('usage', {})
+    
+    def model_dump_json(self):
+        return json.dumps({
+            "choices": [{"message": {"content": choice.message.content}} for choice in self.choices],
+            "model": self.model,
+            "usage": self.usage
+        })
+
+
+class LocalLLMChoice:
+    """Choice wrapper for Local LLM response"""
+    
+    def __init__(self, choice_data):
+        self.message = LocalLLMMessage(choice_data.get('message', {}))
+        self.index = choice_data.get('index', 0)
+        self.finish_reason = choice_data.get('finish_reason', 'stop')
+
+
+class LocalLLMMessage:
+    """Message wrapper for Local LLM response"""
+    
+    def __init__(self, message_data):
+        self.content = message_data.get('content', '')
+        self.role = message_data.get('role', 'assistant')
+
+
 def get_ai_service_config():
     """
     Determine which AI service to use based on AI_SERVICE environment variable.
@@ -162,8 +245,27 @@ def get_ai_service_config():
         except Exception as e:
             raise ValueError(f"Failed to initialize Gemini: {str(e)}")
     
+    elif ai_service == "local":
+        # Local LLM Configuration
+        local_base_url = os.getenv("LOCAL_LLM_BASE_URL", "http://localhost:1234/v1")
+        local_model = os.getenv("LOCAL_LLM_MODEL", "gemma-3-4b-it-qat")
+        local_model_orchestrator = os.getenv("LOCAL_LLM_MODEL_ORCHESTRATOR", "gemma-3-4b-it-qat")
+        
+        try:
+            client = LocalLLMWrapper(local_base_url)
+            # Test connection by making a simple request
+            test_response = client.chat.completions.create(
+                model=local_model,
+                messages=[{"role": "user", "content": "Hello"}],
+                max_completion_tokens=10
+            )
+            print(f"✅ Using Local LLM at {local_base_url} with model: {local_model_orchestrator}")
+            return ("local", client, local_model, local_model_orchestrator)
+        except Exception as e:
+            raise ValueError(f"Failed to connect to Local LLM at {local_base_url}: {str(e)}")
+    
     else:
-        raise ValueError(f"Invalid AI_SERVICE '{ai_service}'. Please set AI_SERVICE to 'azure', 'openai', or 'gemini' in your .env file.")
+        raise ValueError(f"Invalid AI_SERVICE '{ai_service}'. Please set AI_SERVICE to 'azure', 'openai', 'gemini', or 'local' in your .env file.")
 
 
 class Orchestrator:
@@ -284,6 +386,22 @@ class MultiAgent:
                 print(f"Created Gemini agent: {agent_name}")
             return expert_agents
         
+        elif self.service_type == "local":
+            # For Local LLM, create simple agent objects similar to Gemini
+            for agent in dynamic_agents:
+                agent_name = self._standardize_string(agent['name'])
+                # Create a LocalLLMAgent object
+                expert_agent = LocalLLMAgent(
+                    agent_id=agent_name,
+                    name=agent_name,
+                    instructions=agent['system_prompt'],
+                    client=self.client,
+                    model=self.model
+                )
+                expert_agents.append(expert_agent)
+                print(f"Created Local LLM agent: {agent_name}")
+            return expert_agents
+        
         # For Azure/OpenAI, use the existing Semantic Kernel approach
         for agent in dynamic_agents:
 
@@ -312,8 +430,8 @@ class MultiAgent:
         return expert_agents
     
     def create_selection_function(self, expert_agents):
-        if self.service_type == "gemini":
-            # For Gemini, we'll use a simplified selection approach
+        if self.service_type == "gemini" or self.service_type == "local":
+            # For Gemini and Local LLM, we'll use a simplified selection approach
             # Convert agent objects to names for the template
             agent_names = [agent.name for agent in expert_agents]
             selection_function = KernelFunctionFromPrompt(function_name="selection",
@@ -337,6 +455,9 @@ class MultiAgent:
         if self.service_type == "gemini":
             # For Gemini, create a simplified chat group that doesn't use Semantic Kernel
             return GeminiChatGroup(expert_agents, termination_keyword)
+        elif self.service_type == "local":
+            # For Local LLM, create a simplified chat group similar to Gemini
+            return LocalLLMChatGroup(expert_agents, termination_keyword)
         
         # For Azure/OpenAI, use the existing Semantic Kernel approach
         group = AgentGroupChat(agents=expert_agents,
@@ -435,6 +556,95 @@ class GeminiChatGroup:
                     model=agent.model,
                     messages=[{"role": "user", "content": prompt}],
                     max_completion_tokens=1000
+                )
+                
+                # Parse the response
+                response_text = response.choices[0].message.content
+                
+                # Create a mock response object similar to Semantic Kernel's format
+                mock_response = type('MockResponse', (), {
+                    'role': 'assistant',
+                    'name': agent.name,
+                    'content': response_text
+                })()
+                
+                yield mock_response
+                
+                # Check for termination
+                if self.termination_keyword.lower() in response_text.lower():
+                    self.is_complete = True
+                    break
+                    
+            except Exception as e:
+                # Handle errors gracefully
+                error_response = type('ErrorResponse', (), {
+                    'role': 'assistant',
+                    'name': agent.name,
+                    'content': f"I apologize, but I encountered an error while processing your request: {str(e)}"
+                })()
+                yield error_response
+    
+    async def invoke_stream(self):
+        """Streaming version of invoke - alias for invoke since we already yield responses"""
+        async for response in self.invoke():
+            yield response
+    
+    async def reset(self):
+        """Reset the chat group"""
+        self.history = []
+        self.is_complete = False
+
+
+class LocalLLMAgent:
+    """Simple agent class for Local LLM"""
+    
+    def __init__(self, agent_id, name, instructions, client, model):
+        self.id = agent_id
+        self.name = name
+        self.instructions = instructions
+        self.client = client
+        self.model = model
+
+
+class LocalLLMChatGroup:
+    """Simplified chat group for Local LLM agents"""
+    
+    def __init__(self, agents, termination_keyword):
+        self.agents = agents
+        self.termination_keyword = termination_keyword
+        self.is_complete = False
+        self.history = []
+    
+    async def add_chat_message(self, message):
+        """Add a message to the chat history"""
+        self.history.append(message)
+    
+    async def invoke(self):
+        """Invoke the chat group to process messages"""
+        if not self.history:
+            return
+        
+        # Get the last message
+        last_message = self.history[-1]
+        
+        # Process with each agent
+        for agent in self.agents:
+            # Create a prompt combining the agent's instructions with the user message
+            prompt = f"""
+            You are {agent.name}. Your role: {agent.instructions}
+            
+            User request: {last_message.content}
+            
+            Please provide your analysis and recommendations based on your role.
+            """
+            
+            try:
+                # Generate response using Local LLM
+                response = agent.client.chat.completions.create(
+                    model=agent.model,
+                    messages=[{"role": "user", "content": prompt}],
+                    max_completion_tokens=1000,
+                    temperature=0.7
                 )
                 
                 # Parse the response

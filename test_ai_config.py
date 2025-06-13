@@ -54,9 +54,10 @@ def test_ai_service():
     except Exception as e:
         print(f"❌ AI service test failed: {str(e)}")
         print("\n💡 Please check your .env file and ensure:")
-        print("1. AI_SERVICE is set to 'azure', 'openai', or 'gemini'")
+        print("1. AI_SERVICE is set to 'azure', 'openai', 'gemini', or 'local'")
         print("2. The corresponding API credentials are properly configured")
-        print("3. The API key is valid and has sufficient quota")
+        print("3. For local LLM: Make sure your server is running on the configured URL")
+        print("4. The API key is valid and has sufficient quota (for cloud services)")
         return False
 
 if __name__ == "__main__":
