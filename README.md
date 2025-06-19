@@ -182,22 +182,22 @@ Our improved plugin now provides much more accurate assessments:
 
 ```python
 # NEW Weighted Scoring (More Accurate)
-overall_score = (skill_score * 0.35) + (experience_score * 0.25) + 
+overall_score = (skill_score * 0.35) + (experience_score * 0.25) +
                 (education_score * 0.15) + (role_match_score * 0.25)
 
 # Role Level Matching Examples:
 # Management role + Student candidate = 10% role match
-# Management role + Senior Engineer = 60% role match  
+# Management role + Senior Engineer = 60% role match
 # Management role + Engineering Manager = 90% role match
 ```
 
 ### 📈 Real Results Comparison
 
-| Candidate Type | Old Score | New Score | Accuracy |
-|---|---|---|---|
-| **Student (Internships only)** | 80% 😱 | 27% ✅ | Much Better |
-| **Qualified Engineering Manager** | 85% | 71% ✅ | Realistic |
-| **Senior Developer** | 75% | 65% ✅ | Appropriate |
+| Candidate Type                    | Old Score | New Score | Accuracy    |
+| --------------------------------- | --------- | --------- | ----------- |
+| **Student (Internships only)**    | 80% 😱    | 27% ✅    | Much Better |
+| **Qualified Engineering Manager** | 85%       | 71% ✅    | Realistic   |
+| **Senior Developer**              | 75%       | 65% ✅    | Appropriate |
 
 ### 🔧 Technical Improvements
 
@@ -688,29 +688,34 @@ Your system includes **comprehensive usage protection** to control API costs whe
 **Major Performance & Accuracy Update**
 
 #### 🎯 **Critical Fixes**
-- **Fixed Inflated Scoring**: Resolved issue where unqualified candidates scored 80%+ 
+
+- **Fixed Inflated Scoring**: Resolved issue where unqualified candidates scored 80%+
 - **Realistic Assessment**: Student candidates now score appropriately (~27% for senior roles)
 - **Proper Agent Integration**: Fixed mock data issue - now shows actual agent analysis
 
 #### ⚡ **Speed Improvements**
+
 - **4x Faster Processing**: Reduced from 8+ minutes to ~2 minutes
 - **Gemini 2.5 Flash Lite**: Integrated latest high-speed model
 - **Optimized Rounds**: Smart interaction reduction (8→5 rounds for 4 agents)
 - **Speed Mode**: New toggle for ultra-fast screening
 
 #### 🔧 **Enhanced Scoring Algorithm**
+
 - **Role Level Validation**: New 25% weight component for seniority matching
 - **Better Skill Recognition**: Enhanced technical and management skill extraction
 - **Stricter Defaults**: More realistic baseline scores
 - **Improved Experience Parsing**: Better detection of years and role levels
 
 #### 📊 **New Features**
+
 - **Detailed CSV Reports**: Comprehensive downloadable analysis
 - **Real-time Results**: Live agent analysis display
 - **Component Score Breakdown**: Shows Skills/Experience/Education/Role scores
 - **Enhanced Progress Tracking**: Better time estimates and feedback
 
 #### 🎨 **UI/UX Improvements**
+
 - **Speed Mode Interface**: Visual indicators for optimization settings
 - **Better Progress Display**: More accurate phase descriptions
 - **Enhanced Agent Cards**: Clearer specialization descriptions

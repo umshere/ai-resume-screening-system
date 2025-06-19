@@ -508,6 +508,10 @@ def app():
         st.session_state.screening_results = None
     if 'screening_completed' not in st.session_state:
         st.session_state.screening_completed = False
+    if 'download_ready' not in st.session_state:
+        st.session_state.download_ready = False
+    if 'processed_screening_results' not in st.session_state:
+        st.session_state.processed_screening_results = None
     if 'recruiter_priorities' not in st.session_state:
         st.session_state.recruiter_priorities = ""
     if 'special_requirements' not in st.session_state:
@@ -991,6 +995,13 @@ def app():
                     st.stop()
                 
                 st.session_state.running = True
+                # Reset download flags for new screening
+                st.session_state.download_ready = False
+                st.session_state.processed_screening_results = None
+                st.session_state.screening_completed = False
+                # Clear screening timestamp to generate new one
+                if 'screening_timestamp' in st.session_state:
+                    del st.session_state.screening_timestamp
                 
                 job_profile_to_screen = st.session_state.get('job_profile', "")
                 resumes_to_screen = st.session_state.get('resumes', [])
@@ -1005,6 +1016,7 @@ def app():
                         )
                         st.session_state.screening_results = screening_results
                         st.session_state.screening_completed = True  # Mark as completed
+                        st.session_state.download_ready = True  # Enable downloads
                         st.session_state.running = False
                         
                         # Record usage after successful processing
@@ -1054,6 +1066,7 @@ def display_screening_results(results, resumes):
             actual_results.append({
                 "filename": resume["filename"],
                 "score": result['overall_score'],
+                "overall_score": result['overall_score'],  # Add for download compatibility
                 "explanation": result['explanation'],
                 "skill_score": result['skill_score'],
                 "experience_score": result['experience_score'],
@@ -1068,6 +1081,7 @@ def display_screening_results(results, resumes):
             actual_results.append({
                 "filename": resume["filename"],
                 "score": 0,
+                "overall_score": 0,  # Add for download compatibility
                 "explanation": f"Error analyzing resume: {str(e)}",
                 "skill_score": 0,
                 "experience_score": 0,
@@ -1081,6 +1095,13 @@ def display_screening_results(results, resumes):
     # Sort by actual score
     actual_results.sort(key=lambda x: x["score"], reverse=True)
     sample_results = actual_results  # Use actual results instead of mock
+    
+    # Store processed results in session state for download functionality
+    st.session_state.processed_screening_results = actual_results
+    st.session_state.download_ready = True  # Ensure downloads are enabled
+    # Generate unique timestamp for this screening session
+    if 'screening_timestamp' not in st.session_state:
+        st.session_state.screening_timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
     
     for i, result in enumerate(sample_results):
         with st.expander(f"🏆 #{i+1} - {result['filename']} - Score: {result['score']:.1f}%", expanded=i < 3):
@@ -1126,19 +1147,25 @@ def display_screening_results(results, resumes):
                     st.write(", ".join(result['extracted_education']))
     
     # Download report buttons - Use direct download buttons to avoid page reruns
-    if 'screening_results' in st.session_state and st.session_state.screening_results:
+    if st.session_state.get('download_ready', False) and st.session_state.get('processed_screening_results'):
+        st.markdown("---")
+        st.markdown("### 📥 Download Reports")
+        
         col1, col2 = st.columns(2)
+        
+        # Generate timestamp for unique file names and keys - use session timestamp
+        timestamp = st.session_state.get('screening_timestamp', datetime.datetime.now().strftime('%Y%m%d_%H%M%S'))
         
         with col1:
             # Generate CSV report
             try:
-                report_data = generate_detailed_report(st.session_state.screening_results)
+                report_data = generate_detailed_report(st.session_state.processed_screening_results)
                 st.download_button(
                     label="� Download CSV Report",
                     data=report_data,
-                    file_name=f"resume_screening_report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    file_name=f"resume_screening_report_{timestamp}.csv",
                     mime="text/csv",
-                    key="download_csv_direct",
+                    key=f"download_csv_{timestamp}",
                     help="Download detailed screening results as CSV"
                 )
             except Exception as e:
@@ -1147,19 +1174,23 @@ def display_screening_results(results, resumes):
         with col2:
             # Generate summary report
             try:
-                summary_data = generate_summary_report(st.session_state.screening_results)
+                summary_data = generate_summary_report(st.session_state.processed_screening_results)
                 st.download_button(
                     label="📄 Download Summary Report",
                     data=summary_data,
-                    file_name=f"resume_screening_summary_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                    file_name=f"resume_screening_summary_{timestamp}.txt",
                     mime="text/plain",
-                    key="download_summary_direct",
+                    key=f"download_summary_{timestamp}",
                     help="Download summary report as text file"
                 )
             except Exception as e:
                 st.error(f"Error generating summary report: {str(e)}")
     else:
         st.info("📥 Download options will appear after screening is completed.")
+    
+    # Add preservation tip when downloads are available
+    if st.session_state.get('download_ready', False):
+        st.info("💡 **Tip:** Results will remain available until you start a new screening session.")
 
 
 def generate_summary_report(results):
