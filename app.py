@@ -4,6 +4,7 @@ import pandas as pd
 import io
 import PyPDF2
 import docx
+import datetime
 from typing import List, Dict
 from dotenv import load_dotenv
 import os
@@ -327,9 +328,9 @@ async def main_screening(job_profile, resumes, num_agents, max_interactions=None
     """Main screening process"""
     expert_agents, expert_agents_names, mas = await run_resume_screening(job_profile, resumes, num_agents)
     
-    # Set max_interactions based on number of agents if not specified
+    # Set max_interactions based on number of agents if not specified (optimized for speed)
     if max_interactions is None:
-        max_interactions = max(num_agents * 2, 4)  # At least 2 rounds per agent, minimum 4
+        max_interactions = max(num_agents + 1, 3)  # Just 1 round per agent + 1 final round, minimum 3
     
     with st.sidebar:
         st.title("🤖 Expert Screening Agents")
@@ -462,8 +463,8 @@ async def main_screening(job_profile, resumes, num_agents, max_interactions=None
             )
             
             # Update main status with detailed information
-            phase = "Initial Analysis" if current_round <= max_interactions // 2 else "Deep Analysis & Validation"
-            status_text.markdown(f"**Round {current_round}/{max_interactions}** | **{current_agent}** | {len(expert_agents)} agents total | *{phase}*")
+            phase = "⚡ Quick Analysis" if current_round <= max_interactions // 2 else "🎯 Final Scoring"
+            status_text.markdown(f"**Round {current_round}/{max_interactions}** | **{current_agent}** | {len(expert_agents)} agents | *{phase}*")
             detailed_status.info(f"🎯 {current_activity}")
             progress_bar.progress(current_round / max_interactions)
             
@@ -562,7 +563,7 @@ def app():
         st.markdown("### ⚙️ Screening Configuration")
         st.markdown("Configure the AI agents and analysis depth for optimal screening results.")
         
-        col_config1, col_config2 = st.columns([1, 1])
+        col_config1, col_config2, col_config3 = st.columns([1, 1, 1])
         
         with col_config1:
             st.markdown("**👥 Expert Agents**")
@@ -570,39 +571,66 @@ def app():
                 "Number of expert agents",
                 min_value=2,
                 max_value=6,
-                value=st.session_state.num_agents,
+                value=3,  # Default to 3 for speed
                 step=1,
                 help="💡 More agents provide more detailed analysis but take longer to complete"
             )
-            st.session_state.num_agents = num_agents
-            
-            # Agent explanation
-            agent_descriptions = {
-                2: "Basic analysis with 2 core agents",
-                3: "Balanced analysis with 3 specialized agents", 
-                4: "Comprehensive analysis with 4 expert agents (Recommended)",
-                5: "Detailed analysis with 5 specialized agents",
-                6: "Maximum analysis with 6 expert agents"
-            }
-            st.info(f"🤖 {agent_descriptions.get(num_agents, 'Custom configuration')}")
             
         with col_config2:
             st.markdown("**🔍 Analysis Depth**")
             analysis_depth = st.selectbox(
                 "Analysis depth",
                 ["Quick Overview", "Standard Analysis", "Deep Dive"],
-                index=["Quick Overview", "Standard Analysis", "Deep Dive"].index(st.session_state.analysis_depth),
-                help="Choose the level of detail for resume analysis"
+                index=0,  # Default to Quick for speed
+                help="Choose analysis depth vs speed trade-off"
             )
-            st.session_state.analysis_depth = analysis_depth
             
-            # Depth explanation
-            depth_descriptions = {
-                "Quick Overview": "⚡ Fast screening with key highlights",
-                "Standard Analysis": "⚖️ Balanced analysis with detailed insights", 
-                "Deep Dive": "🔬 Comprehensive analysis with detailed explanations"
-            }
-            st.info(depth_descriptions[analysis_depth])
+        with col_config3:
+            st.markdown("**⚡ Speed Mode**")
+            speed_mode = st.checkbox(
+                "Enable Speed Mode",
+                value=True,
+                help="Faster screening with optimized settings"
+            )
+            
+            if speed_mode:
+                st.info("⚡ Speed optimizations active")
+                if num_agents > 3:
+                    num_agents = 3
+                    st.caption("→ Limited to 3 agents for speed")
+                
+        # Store in session state
+        st.session_state.num_agents = num_agents
+        st.session_state.analysis_depth = analysis_depth
+        st.session_state.speed_mode = speed_mode
+            
+        # Agent explanation
+        agent_descriptions = {
+            2: "Basic analysis with 2 core agents",
+            3: "Balanced analysis with 3 specialized agents", 
+            4: "Comprehensive analysis with 4 expert agents (Recommended)",
+            5: "Detailed analysis with 5 specialized agents",
+            6: "Maximum analysis with 6 expert agents"
+        }
+        st.info(f"🤖 {agent_descriptions.get(num_agents, 'Custom configuration')}")
+        
+        # Continue with existing analysis depth code
+        st.markdown("**🔍 Analysis Depth (Applied to all agents)**")
+        analysis_depth = st.selectbox(
+            "Analysis depth",
+            ["Quick Overview", "Standard Analysis", "Deep Dive"],
+            index=["Quick Overview", "Standard Analysis", "Deep Dive"].index(st.session_state.analysis_depth),
+            help="Choose the level of detail for resume analysis"
+        )
+        st.session_state.analysis_depth = analysis_depth
+        
+        # Depth explanation
+        depth_descriptions = {
+            "Quick Overview": "⚡ Fast screening with key highlights",
+            "Standard Analysis": "⚖️ Balanced analysis with detailed insights", 
+            "Deep Dive": "🔬 Comprehensive analysis with detailed explanations"
+        }
+        st.info(depth_descriptions[analysis_depth])
 
         # Dynamic Agent Preview Section
         st.markdown("---")
@@ -923,7 +951,7 @@ def app():
             st.info(f"""
             **🎯 Priorities:** {priorities_text}
             **� Requirements:** {requirements_text}
-            **⏱️ Est. Time:** {st.session_state.num_agents * 2} minutes
+            **⏱️ Est. Time:** {max(st.session_state.num_agents // 2, 1)} minutes
             """)
         
         # Display detailed summaries with expandable sections
@@ -1000,71 +1028,264 @@ def display_screening_results(results, resumes):
     """Display the screening results in an organized format"""
     st.markdown("### 🎯 Matching Results")
     
-    # Mock results for demonstration (replace with actual agent results)
-    sample_results = []
-    for i, resume in enumerate(resumes):
-        score = 85 - (i * 5)  # Mock decreasing scores
-        sample_results.append({
-            "filename": resume["filename"],
-            "score": score,
-            "explanation": f"Strong match with {score}% compatibility. Candidate shows excellent technical skills and relevant experience.",
-            "strengths": ["Technical expertise", "Industry experience", "Education background"],
-            "concerns": ["Limited experience in specific domain", "Skill gap in emerging technologies"]
-        })
+    # Use actual plugin results for accurate scoring instead of mock data
+    from src.plugins.resume_screening import ResumeScreeningPlugin
     
-    # Sort by score
-    sample_results.sort(key=lambda x: x["score"], reverse=True)
+    plugin = ResumeScreeningPlugin()
+    job_profile = st.session_state.get('job_profile', '')
+    
+    actual_results = []
+    for resume in resumes:
+        try:
+            # Get actual plugin analysis
+            result_json = plugin.analyze_resume(
+                resume_content=resume['content'],
+                job_profile=job_profile,
+                candidate_name=resume['filename']
+            )
+            
+            import json
+            result = json.loads(result_json)
+            
+            # Create structured result with actual scores
+            actual_results.append({
+                "filename": resume["filename"],
+                "score": result['overall_score'],
+                "explanation": result['explanation'],
+                "skill_score": result['skill_score'],
+                "experience_score": result['experience_score'],
+                "education_score": result['education_score'],
+                "role_match_score": result['role_match_score'],
+                "extracted_skills": result['extracted_skills'],
+                "extracted_experience": result['extracted_experience'],
+                "extracted_education": result['extracted_education']
+            })
+        except Exception as e:
+            # Fallback for error cases
+            actual_results.append({
+                "filename": resume["filename"],
+                "score": 0,
+                "explanation": f"Error analyzing resume: {str(e)}",
+                "skill_score": 0,
+                "experience_score": 0,
+                "education_score": 0,
+                "role_match_score": 0,
+                "extracted_skills": [],
+                "extracted_experience": [],
+                "extracted_education": []
+            })
+    
+    # Sort by actual score
+    actual_results.sort(key=lambda x: x["score"], reverse=True)
+    sample_results = actual_results  # Use actual results instead of mock
     
     for i, result in enumerate(sample_results):
-        with st.expander(f"🏆 #{i+1} - {result['filename']} - Score: {result['score']}%", expanded=i < 3):
+        with st.expander(f"🏆 #{i+1} - {result['filename']} - Score: {result['score']:.1f}%", expanded=i < 3):
             col1, col2 = st.columns([1, 2])
             
             with col1:
-                st.markdown(f'<div class="matching-score">{result["score"]}%</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="matching-score">{result["score"]:.1f}%</div>', unsafe_allow_html=True)
                 
-                # Score interpretation
-                if result["score"] >= 80:
+                # Score interpretation with stricter thresholds
+                if result["score"] >= 75:
                     st.success("🎯 Excellent Match")
                 elif result["score"] >= 60:
-                    st.warning("⚡ Good Match")
+                    st.warning("⚡ Good Match")  
+                elif result["score"] >= 45:
+                    st.info("🔍 Moderate Match")
+                elif result["score"] >= 30:
+                    st.warning("⚠️ Weak Match")
                 else:
                     st.error("❌ Poor Match")
+                
+                # Detailed score breakdown
+                st.markdown("**Score Breakdown:**")
+                st.metric("Skills", f"{result.get('skill_score', 0):.1f}%")
+                st.metric("Experience", f"{result.get('experience_score', 0):.1f}%") 
+                st.metric("Education", f"{result.get('education_score', 0):.1f}%")
+                st.metric("Role Match", f"{result.get('role_match_score', 0):.1f}%")
             
             with col2:
-                st.markdown("**📝 Analysis Summary:**")
+                st.markdown("📝 **Analysis Summary:**")
                 st.write(result["explanation"])
                 
-                st.markdown("**✅ Strengths:**")
-                for strength in result["strengths"]:
-                    st.write(f"• {strength}")
+                # Show extracted data
+                if result.get('extracted_skills'):
+                    st.markdown("**🔧 Detected Skills:**")
+                    st.write(", ".join(result['extracted_skills'][:10]))  # Show first 10 skills
                 
-                st.markdown("**⚠️ Areas of Concern:**")
-                for concern in result["concerns"]:
-                    st.write(f"• {concern}")
+                if result.get('extracted_experience'):
+                    st.markdown("**📈 Experience Data:**") 
+                    st.write(", ".join(result['extracted_experience']))
+                    
+                if result.get('extracted_education'):
+                    st.markdown("**🎓 Education Data:**")
+                    st.write(", ".join(result['extracted_education']))
     
-    # Download report button
-    if st.button("📥 Download Detailed Report", type="secondary"):
-        # Generate and download report
-        report_data = generate_report(sample_results)
-        st.download_button(
-            label="📄 Download CSV Report",
-            data=report_data,
-            file_name="resume_screening_report.csv",
-            mime="text/csv"
-        )
+    # Download report buttons
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("📥 Download CSV Report", type="secondary"):
+            if 'screening_results' in st.session_state and st.session_state.screening_results:
+                # Generate and download CSV report
+                report_data = generate_detailed_report(st.session_state.screening_results)
+                st.download_button(
+                    label="📄 Download CSV Report",
+                    data=report_data,
+                    file_name=f"resume_screening_report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv",
+                    key="download_csv_report"
+                )
+            else:
+                st.error("No screening results available. Please run the screening first.")
+    
+    with col2:
+        if st.button("📄 Download Summary Report", type="secondary"):
+            if 'screening_results' in st.session_state and st.session_state.screening_results:
+                # Generate and download summary text report
+                summary_data = generate_summary_report(st.session_state.screening_results)
+                st.download_button(
+                    label="📄 Download Summary",
+                    data=summary_data,
+                    file_name=f"resume_screening_summary_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                    mime="text/plain",
+                    key="download_summary_report"
+                )
+            else:
+                st.error("No screening results available. Please run the screening first.")
 
-def generate_report(results):
-    """Generate a CSV report of the screening results"""
+def generate_summary_report(results):
+    """Generate a human-readable summary report"""
     import io
     output = io.StringIO()
     
-    # Create CSV content
-    output.write("Rank,Filename,Score,Status,Summary\n")
-    for i, result in enumerate(results):
-        status = "Excellent" if result["score"] >= 80 else "Good" if result["score"] >= 60 else "Poor"
-        output.write(f"{i+1},{result['filename']},{result['score']}%,{status},\"{result['explanation']}\"\n")
+    # Report header
+    output.write("AI RESUME SCREENING SUMMARY REPORT\n")
+    output.write("=" * 50 + "\n")
+    output.write(f"Generated on: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+    output.write(f"Total Candidates Analyzed: {len(results)}\n\n")
+    
+    # Summary statistics
+    scores = [result.get('overall_score', 0) for result in results]
+    avg_score = sum(scores) / len(scores) if scores else 0
+    
+    highly_recommended = len([s for s in scores if s >= 75])
+    recommended = len([s for s in scores if 60 <= s < 75])
+    consider_caution = len([s for s in scores if 45 <= s < 60])
+    not_recommended = len([s for s in scores if s < 45])
+    
+    output.write("SUMMARY STATISTICS:\n")
+    output.write("-" * 20 + "\n")
+    output.write(f"Average Score: {avg_score:.1f}%\n")
+    output.write(f"Highly Recommended: {highly_recommended} candidates\n")
+    output.write(f"Recommended: {recommended} candidates\n")
+    output.write(f"Consider with Caution: {consider_caution} candidates\n")
+    output.write(f"Not Recommended: {not_recommended} candidates\n\n")
+    
+    # Individual candidate details
+    output.write("INDIVIDUAL CANDIDATE ANALYSIS:\n")
+    output.write("=" * 50 + "\n\n")
+    
+    # Sort by score (highest first)
+    sorted_results = sorted(results, key=lambda x: x.get('overall_score', 0), reverse=True)
+    
+    for i, result in enumerate(sorted_results, 1):
+        output.write(f"RANK #{i}: {result.get('candidate', 'Unknown Candidate')}\n")
+        output.write("-" * 30 + "\n")
+        output.write(f"File: {result.get('filename', 'Unknown')}\n")
+        output.write(f"Overall Score: {result.get('overall_score', 0):.1f}%\n")
+        
+        # Score breakdown
+        output.write("\nScore Breakdown:\n")
+        output.write(f"  • Skills Match: {result.get('skill_score', 0):.1f}%\n")
+        output.write(f"  • Experience Match: {result.get('experience_score', 0):.1f}%\n")
+        output.write(f"  • Education Match: {result.get('education_score', 0):.1f}%\n")
+        output.write(f"  • Role Level Match: {result.get('role_match_score', 0):.1f}%\n")
+        
+        # Key findings
+        skills = result.get('extracted_skills', [])[:3]
+        if skills:
+            output.write(f"\nKey Skills Found: {', '.join(skills)}\n")
+        
+        experience = result.get('extracted_experience', [])
+        if experience:
+            output.write(f"Experience: {', '.join(experience)} years\n")
+            
+        education = result.get('extracted_education', [])[:2]
+        if education:
+            output.write(f"Education: {', '.join(education)}\n")
+        
+        # Recommendation
+        overall_score = result.get('overall_score', 0)
+        if overall_score >= 75:
+            recommendation = "HIGHLY RECOMMENDED ⭐⭐⭐"
+        elif overall_score >= 60:
+            recommendation = "RECOMMENDED ⭐⭐"
+        elif overall_score >= 45:
+            recommendation = "CONSIDER WITH CAUTION ⚠️"
+        else:
+            recommendation = "NOT RECOMMENDED ❌"
+            
+        output.write(f"\nRecommendation: {recommendation}\n")
+        output.write("\n" + "="*50 + "\n\n")
     
     return output.getvalue()
+
+def generate_detailed_report(results):
+    """Generate a comprehensive CSV report of the screening results"""
+    import io
+    output = io.StringIO()
+    
+    # Create detailed CSV header
+    output.write("Rank,Candidate_Name,Filename,Overall_Score,Skill_Score,Experience_Score,Education_Score,Role_Match_Score,Recommendation,Skills_Found,Experience_Years,Education_Background,Strengths,Areas_of_Concern\n")
+    
+    for i, result in enumerate(results):
+        try:
+            # Extract data safely with defaults
+            overall_score = result.get('overall_score', 0)
+            skill_score = result.get('skill_score', 0)
+            experience_score = result.get('experience_score', 0) 
+            education_score = result.get('education_score', 0)
+            role_match_score = result.get('role_match_score', 0)
+            
+            # Determine recommendation based on score
+            if overall_score >= 75:
+                recommendation = "Highly Recommended"
+            elif overall_score >= 60:
+                recommendation = "Recommended" 
+            elif overall_score >= 45:
+                recommendation = "Consider with Caution"
+            elif overall_score >= 30:
+                recommendation = "Weak Match"
+            else:
+                recommendation = "Not Recommended"
+            
+            # Extract skills, experience, education
+            skills = ", ".join(result.get('extracted_skills', [])[:5])  # Top 5 skills
+            experience = ", ".join(result.get('extracted_experience', []))
+            education = ", ".join(result.get('extracted_education', [])[:3])  # Top 3 education items
+            
+            # Extract strengths and concerns from explanation if available
+            explanation = result.get('explanation', '')
+            strengths = "Technical skills present" if skill_score > 50 else "Limited technical alignment"
+            concerns = "Experience gaps" if experience_score < 50 else "Minor skill gaps"
+            
+            # Format CSV row with proper escaping
+            candidate_name = result.get('candidate', f'Candidate_{i+1}')
+            filename = result.get('filename', 'Unknown')
+            
+            output.write(f'{i+1},"{candidate_name}","{filename}",{overall_score:.1f}%,{skill_score:.1f}%,{experience_score:.1f}%,{education_score:.1f}%,{role_match_score:.1f}%,"{recommendation}","{skills}","{experience}","{education}","{strengths}","{concerns}"\n')
+            
+        except Exception as e:
+            # Fallback for any parsing errors
+            output.write(f'{i+1},"Parse Error","Error",0%,0%,0%,0%,0%,"Error","Error parsing result","","","Error","Error"\n')
+    
+    return output.getvalue()
+
+def generate_report(results):
+    """Legacy function - kept for compatibility"""
+    return generate_detailed_report(results)
 
 if __name__ == "__main__":
     app()

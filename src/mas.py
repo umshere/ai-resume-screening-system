@@ -4,7 +4,9 @@ import requests
 from jinja2 import Environment, FileSystemLoader
 from openai import AzureOpenAI, OpenAI
 import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from dotenv import load_dotenv
+from typing import Dict, Any, List, Tuple
 
 # Load environment variables from .env file
 load_dotenv()
@@ -64,9 +66,20 @@ class GeminiChatCompletions:
         # Combine system and user messages for Gemini
         final_message = f"{system_message}\n\n{user_message}" if system_message else user_message
         
+        # Configure for speed
+        generation_config = genai.types.GenerationConfig(
+            max_output_tokens=max_completion_tokens or max_tokens or 2000,
+            temperature=0.1,  # Lower temperature for faster, more consistent responses
+            top_p=0.8,
+            top_k=20,
+        )
+        
         # Generate response
         try:
-            response = gemini_model.generate_content(final_message)
+            response = gemini_model.generate_content(
+                final_message,
+                generation_config=generation_config
+            )
             return GeminiResponse(response.text, model)
         except Exception as e:
             # If response is blocked, return a default message
@@ -103,27 +116,62 @@ class GeminiMessage:
         self.content = text
 
 
+class CompletionsWrapper:
+    """Wrapper to provide completions attribute for OpenAI compatibility"""
+    
+    def __init__(self, llm_wrapper):
+        self.completions = llm_wrapper
+
+
 class LocalLLMWrapper:
     """Wrapper class to make Local LLM API compatible with OpenAI interface"""
     
-    def __init__(self, base_url="http://localhost:1234/v1"):
-        self.base_url = base_url
-        self.chat = LocalLLMChatCompletions(base_url)
-
-
-class LocalLLMChatCompletions:
-    """Chat completions interface for Local LLM"""
-    
     def __init__(self, base_url):
         self.base_url = base_url
+        self.max_context_length = 4096  # Default context length, can be overridden
+        
+        # Create nested structure to match OpenAI interface: client.chat.completions.create()
         self.completions = self
+        self.chat = CompletionsWrapper(self)
+    
+    def optimize_messages_for_context(self, messages, model):
+        """Optimize messages to fit within context length"""
+        total_tokens = sum(estimate_tokens(msg.get('content', '')) for msg in messages)
+        
+        if total_tokens <= self.max_context_length - 500: # Reserve 500 tokens for response
+            return messages
+        
+        # If context is too long, optimize the content
+        optimized_messages = []
+        remaining_tokens = self.max_context_length - 500
+        
+        for msg in messages:
+            content = msg.get('content', '')
+            content_tokens = estimate_tokens(content)
+            
+            if content_tokens > remaining_tokens:
+                # Truncate content to fit
+                optimized_content = truncate_text_to_tokens(content, remaining_tokens)
+                optimized_messages.append({
+                    **msg,
+                    'content': optimized_content
+                })
+                break  # Can't fit more messages
+            else:
+                optimized_messages.append(msg)
+                remaining_tokens -= content_tokens
+        
+        return optimized_messages
     
     def create(self, model, messages, max_tokens=None, max_completion_tokens=None, temperature=0.7, **kwargs):
         """Create a chat completion using the local LLM API"""
+        # Optimize messages for context length
+        optimized_messages = self.optimize_messages_for_context(messages, model)
+        
         # Prepare the request payload
         payload = {
             "model": model,
-            "messages": messages,
+            "messages": optimized_messages,
             "temperature": temperature,
             "max_tokens": max_completion_tokens or max_tokens or 1000,
             "stream": False
@@ -142,7 +190,12 @@ class LocalLLMChatCompletions:
                 response_data = response.json()
                 return LocalLLMResponse(response_data, model)
             else:
-                raise Exception(f"Local LLM API error: {response.status_code} - {response.text}")
+                error_text = response.text
+                # Check if it's a context length error and provide helpful message
+                if "context" in error_text.lower() and "overflow" in error_text.lower():
+                    raise Exception(f"Context length exceeded. Try increasing the context length in LM Studio or use a shorter input. Error: {error_text}")
+                else:
+                    raise Exception(f"Local LLM API error: {response.status_code} - {error_text}")
                 
         except requests.exceptions.ConnectionError:
             raise Exception("Could not connect to local LLM server. Make sure it's running on http://localhost:1234")
@@ -250,19 +303,25 @@ def get_ai_service_config():
         local_base_url = os.getenv("LOCAL_LLM_BASE_URL", "http://localhost:1234/v1")
         local_model = os.getenv("LOCAL_LLM_MODEL", "gemma-3-4b-it-qat")
         local_model_orchestrator = os.getenv("LOCAL_LLM_MODEL_ORCHESTRATOR", "gemma-3-4b-it-qat")
+        local_context_length = int(os.getenv("LOCAL_LLM_CONTEXT_LENGTH", "4096"))
         
         try:
             client = LocalLLMWrapper(local_base_url)
+            client.max_context_length = local_context_length  # Set context length
             # Test connection by making a simple request
             test_response = client.chat.completions.create(
                 model=local_model,
                 messages=[{"role": "user", "content": "Hello"}],
                 max_completion_tokens=10
             )
-            print(f"✅ Using Local LLM at {local_base_url} with model: {local_model_orchestrator}")
+            print(f"✅ Using Local LLM at {local_base_url} with model: {local_model_orchestrator} (context: {local_context_length} tokens)")
             return ("local", client, local_model, local_model_orchestrator)
         except Exception as e:
-            raise ValueError(f"Failed to connect to Local LLM at {local_base_url}: {str(e)}")
+            error_msg = str(e)
+            if "context" in error_msg.lower() and "overflow" in error_msg.lower():
+                print(f"❌ Context length error: {error_msg}")
+                print(f"💡 Try increasing LOCAL_LLM_CONTEXT_LENGTH in your .env file or increase context length in LM Studio")
+            raise ValueError(f"Failed to connect to Local LLM at {local_base_url}: {error_msg}")
     
     else:
         raise ValueError(f"Invalid AI_SERVICE '{ai_service}'. Please set AI_SERVICE to 'azure', 'openai', 'gemini', or 'local' in your .env file.")
@@ -682,3 +741,101 @@ class LocalLLMChatGroup:
         """Reset the chat group"""
         self.history = []
         self.is_complete = False
+
+
+# Add function to estimate token count for context length management
+def estimate_tokens(text, model="gpt-3.5-turbo"):
+    """Estimate token count for a given text using simple heuristic."""
+    # Fallback: rough estimation (1 token ≈ 4 characters for English)
+    return len(text) // 4
+
+def truncate_for_context_length(text, max_tokens=2000):
+    """Truncate text to fit within token limits while preserving meaning"""
+    if estimate_tokens(text) <= max_tokens:
+        return text
+    
+    # For job profiles, keep the most important parts
+    lines = text.split('\n')
+    truncated_lines = []
+    current_tokens = 0
+    
+    # Prioritize essential sections
+    essential_keywords = ['requirements', 'responsibilities', 'qualifications', 'skills', 'experience']
+    
+    # First pass: add lines with essential keywords
+    for line in lines:
+        line_tokens = estimate_tokens(line)
+        if current_tokens + line_tokens <= max_tokens:
+            if any(keyword.lower() in line.lower() for keyword in essential_keywords):
+                truncated_lines.append(line)
+                current_tokens += line_tokens
+    
+    # Second pass: fill remaining space with other lines
+    for line in lines:
+        line_tokens = estimate_tokens(line)
+        if current_tokens + line_tokens <= max_tokens and line not in truncated_lines:
+            truncated_lines.append(line)
+            current_tokens += line_tokens
+        elif current_tokens + line_tokens > max_tokens:
+            break
+    
+    result = '\n'.join(truncated_lines)
+    if len(result) < len(text):
+        result += f"\n\n[Note: Job profile truncated for context length. Original length: {estimate_tokens(text)} tokens, truncated to: {estimate_tokens(result)} tokens]"
+    
+    return result
+
+# Context length management functions
+def estimate_token_count(text: str) -> int:
+    """Estimate token count using a simple heuristic (4 characters per token on average)"""
+    return len(text) // 4
+
+def truncate_text_to_tokens(text: str, max_tokens: int) -> str:
+    """Truncate text to fit within token limit"""
+    estimated_tokens = estimate_token_count(text)
+    if estimated_tokens <= max_tokens:
+        return text
+    
+    # Calculate approximate character limit
+    char_limit = max_tokens * 4
+    
+    # Try to truncate at word boundaries
+    if len(text) > char_limit:
+        truncated = text[:char_limit]
+        # Find the last complete word
+        last_space = truncated.rfind(' ')
+        if last_space > char_limit * 0.8:  # Only if we don't lose too much
+            truncated = truncated[:last_space]
+        return truncated + "... [truncated]"
+    
+    return text
+
+def optimize_screening_context(context: Dict[str, Any], max_tokens: int = 3000) -> Dict[str, Any]:
+    """Optimize screening context to fit within token limits"""
+    optimized = context.copy()
+    
+    # Prioritize job requirements and keep them full
+    job_profile = optimized.get('job_profile', '')
+    job_tokens = estimate_token_count(job_profile)
+    
+    # Reserve tokens for job profile and template overhead
+    remaining_tokens = max_tokens - job_tokens - 500  # 500 for template overhead
+    
+    if remaining_tokens < 0:
+        # Job profile itself is too long, need to truncate it
+        optimized['job_profile'] = truncate_text_to_tokens(job_profile, max_tokens - 500)
+        remaining_tokens = 500
+    
+    # Truncate other fields if needed
+    for key in ['additional_context', 'resume_content', 'candidate_info']:
+        if key in optimized and remaining_tokens > 0:
+            field_content = str(optimized[key])
+            field_tokens = estimate_token_count(field_content)
+            
+            if field_tokens > remaining_tokens // 2:  # Don't let one field dominate
+                optimized[key] = truncate_text_to_tokens(field_content, remaining_tokens // 2)
+                remaining_tokens -= remaining_tokens // 2
+            else:
+                remaining_tokens -= field_tokens
+    
+    return optimized
