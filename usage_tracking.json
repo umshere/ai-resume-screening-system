@@ -1,8 +1,8 @@
 {
-  "daily_cost": 0.39,
-  "last_reset": "2025-06-13",
-  "session_count": 15,
-  "total_resumes_processed": 15,
+  "daily_cost": 0,
+  "last_reset": "2025-06-15",
+  "session_count": 0,
+  "total_resumes_processed": 16,
   "peak_daily_cost": 0.39,
   "first_use_date": "2025-06-13"
 }

@@ -11,8 +11,7 @@ import os
 # Load environment variables from .env file
 load_dotenv()
 
-from semantic_kernel.contents.chat_message_content import ChatMessageContent
-from semantic_kernel.contents.utils.author_role import AuthorRole
+from semantic_kernel.contents import ChatMessageContent, AuthorRole
 from src.mas import Orchestrator, MultiAgent
 from src.usage_protection import UsageTracker, add_usage_monitoring, show_usage_stats
 
@@ -22,69 +21,232 @@ st.set_page_config(
     layout="wide"
 )
 
-# Enhanced CSS for resume screening interface
+# Apple-inspired minimal CSS design
 st.markdown(
     """
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
-    body {
-        font-family: 'Poppins', sans-serif;
-        background: linear-gradient(-45deg, #667eea, #764ba2, #6b73ff, #9a9ce1);
-        background-size: 400% 400%;
-        animation: gradientBG 15s ease infinite;
-        margin: 0;
-        padding: 0;
+    @import url('https://fonts.googleapis.com/css2?family=-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif');
+    
+    /* Clean background and typography */
+    .main {
+        background: #f8f9fa;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
-    @keyframes gradientBG {
-        0% { background-position: 0% 50%; }
-        50% { background-position: 100% 50%; }
-        100% { background-position: 0% 50%; }
+    
+    /* Minimal step indicator */
+    .step-indicator {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: white;
+        border-radius: 12px;
+        padding: 16px 24px;
+        margin: 24px 0;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        border: 1px solid #e5e7eb;
     }
-    .stFileUploader {
-        background: rgba(255,255,255,0.1);
-        border-radius: 10px;
-        padding: 1em;
-        border: 2px dashed #667eea;
+    
+    .step {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        color: #6b7280;
     }
-    .stTextArea textarea {
-        background: rgba(255,255,255,0.9);
-        border-radius: 8px;
+    
+    .step.completed {
+        color: #059669;
     }
-    .stButton>button {
-        background-color: #667eea;
-        color: #fff;
-        border: none;
-        border-radius: 10px;
-        font-size: 1em;
-        padding: 0.6em 1em;
-        margin-top: 1em;
-        transition: 0.3s;
-        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    
+    .step-circle {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: #e5e7eb;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: 600;
+        color: #6b7280;
     }
-    .stButton>button:hover {
-        background-color: #764ba2;
-        box-shadow: 0 6px 20px rgba(118, 75, 162, 0.3);
+    
+    .step-circle.completed {
+        background: #059669;
+        color: white;
     }
-    .agent-status {
-        background: rgba(255,255,255,0.9);
-        border-radius: 8px;
-        padding: 10px;
-        margin: 5px 0;
-        border-left: 4px solid #667eea;
+    
+    .step-divider {
+        flex: 1;
+        height: 2px;
+        background: #e5e7eb;
+        margin: 0 16px;
     }
-    .matching-score {
-        font-size: 2em;
-        font-weight: bold;
-        color: #667eea;
+    
+    .step-divider.completed {
+        background: #059669;
+    }
+    
+    /* Clean file uploader */
+    .stFileUploader > div {
+        background: white;
+        border: 2px dashed #d1d5db;
+        border-radius: 12px;
+        padding: 32px;
         text-align: center;
-        background: rgba(255,255,255,0.9);
-        border-radius: 10px;
-        padding: 20px;
-        margin: 10px 0;
+        transition: all 0.2s ease;
     }
+    
+    .stFileUploader > div:hover {
+        border-color: #3b82f6;
+        background: #f8faff;
+    }
+    
+    /* Drag and drop text area */
+    .drag-drop-area {
+        background: white;
+        border: 2px dashed #d1d5db;
+        border-radius: 12px;
+        padding: 32px;
+        text-align: center;
+        transition: all 0.2s ease;
+        cursor: pointer;
+        margin: 16px 0;
+    }
+    
+    .drag-drop-area:hover {
+        border-color: #3b82f6;
+        background: #f8faff;
+    }
+    
+    .drag-drop-area.dragover {
+        border-color: #059669;
+        background: #f0fdf4;
+    }
+    
+    /* Agent preview cards */
+    .agent-preview-card {
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 16px;
+        margin: 8px 0;
+        transition: all 0.2s ease;
+        border-left: 4px solid #3b82f6;
+    }
+    
+    .agent-preview-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        transform: translateY(-2px);
+    }
+    
+    .agent-title {
+        font-weight: 600;
+        color: #1f2937;
+        margin-bottom: 4px;
+    }
+    
+    .agent-description {
+        color: #6b7280;
+        font-size: 14px;
+        line-height: 1.4;
+    }
+    
+    /* Instructions banner */
+    .instruction-banner {
+        background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+        color: white;
+        padding: 12px 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        font-weight: 500;
+        text-align: center;
+        box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
+    }
+    
+    /* Clean buttons */
+    .stButton > button {
+        background: #3b82f6;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 12px 24px;
+        font-weight: 500;
+        font-size: 14px;
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+    
+    .stButton > button:hover {
+        background: #2563eb;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.12);
+    }
+    
+    /* Clean text areas */
+    .stTextArea textarea {
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        font-size: 14px;
+        line-height: 1.5;
+    }
+    
+    .stTextArea textarea:focus {
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+    
+    /* Clean tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 4px;
+        background: #f3f4f6;
+        border-radius: 10px;
+        padding: 4px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        background: transparent;
+        border: none;
+        border-radius: 6px;
+        padding: 8px 16px;
+        font-weight: 500;
+        color: #6b7280;
+        transition: all 0.2s ease;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background: white;
+        color: #374151;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+    
+    /* Clean agent status */
+    .agent-status {
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin: 8px 0;
+        border-left: 3px solid #3b82f6;
+    }
+    
+    /* Clean headers */
     h1, h2, h3 {
-        color: #fff;
-        text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+        color: #111827;
+        font-weight: 600;
+        letter-spacing: -0.025em;
+    }
+    
+    /* Hide streamlit branding */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+    /* Clean containers */
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
     }
     </style>
     """,
@@ -260,16 +422,23 @@ async def main_screening(job_profile, resumes, num_agents, max_interactions=None
         activity_index = (round_num - 1) % len(agent_activities)
         return agent_activities[activity_index]
     
-    # Create screening context
+    # Create screening context with recruiter preferences
+    recruiter_priorities = st.session_state.get('recruiter_priorities', '')
+    special_requirements = st.session_state.get('special_requirements', '')
+    
     screening_input = f"""
     Job Profile: {job_profile}
     
     Number of Resumes to Screen: {len(resumes)}
     
+    Recruiter Priorities: {recruiter_priorities if recruiter_priorities else 'None specified'}
+    
+    Special Requirements: {special_requirements if special_requirements else 'None specified'}
+    
     Resumes:
     {chr(10).join([f"{i+1}. {resume['filename']}: {resume['content'][:500]}..." for i, resume in enumerate(resumes)])}
     
-    Please analyze each resume against the job profile and provide matching scores with detailed explanations.
+    Please analyze each resume against the job profile, taking into account the recruiter's priorities and special requirements. Provide matching scores with detailed explanations, highlighting how well each candidate meets the specific priorities and requirements mentioned.
     """
     
     progress_bar = st.progress(0)
@@ -336,221 +505,60 @@ def app():
         st.session_state.running = False
     if 'screening_results' not in st.session_state:
         st.session_state.screening_results = None
+    if 'recruiter_priorities' not in st.session_state:
+        st.session_state.recruiter_priorities = ""
+    if 'special_requirements' not in st.session_state:
+        st.session_state.special_requirements = ""
 
-    st.title("📋 AI Resume Screening & Matching System 📋")
-    st.subheader("Intelligent resume screening with AI expert agents")
+    st.title("AI Resume Screening")
+    st.markdown("Intelligent resume screening with AI expert agents")
     
-    # Usage monitoring display
-    with st.expander("📊 Usage & Cost Monitoring", expanded=False):
+    # Usage monitoring (collapsed by default for cleaner UI)
+    with st.expander("💰 Usage & Cost Monitoring"):
         show_usage_stats()
-        st.markdown("""
-        **💡 Cost Protection Features:**
-        - Daily spending limit: $10
-        - Session limit: 20 resumes
-        - Real-time usage tracking
-        - Automatic reset at midnight
-        """)
+        st.caption("Daily limit: $10 | Session limit: 20 resumes | Real-time tracking")
     
-    # Progress indicator
-    progress_steps = ["Job Profile", "Resumes", "Configuration", "Review & Start"]
+    # Single minimal step indicator - Highlight Configuration first
+    steps = ["Configuration", "Job Profile", "Resumes", "Review"]
     completed_steps = []
     
+    # Configuration is always highlighted first as suggested
+    completed_steps.append("Configuration")
     if st.session_state.job_profile.strip():
         completed_steps.append("Job Profile")
     if st.session_state.resumes:
         completed_steps.append("Resumes")
-    if st.session_state.num_agents >= 2:
-        completed_steps.append("Configuration")
+    if len(completed_steps) == 3:
+        completed_steps.append("Review")
     
-    # Progress bar
-    progress_value = len(completed_steps) / len(progress_steps)
-    st.progress(progress_value, text=f"Setup Progress: {len(completed_steps)}/{len(progress_steps)} steps completed")
+    # Clean step indicator
+    step_html = '<div class="step-indicator">'
+    for i, step in enumerate(steps):
+        is_completed = step in completed_steps
+        step_class = "step completed" if is_completed else "step"
+        circle_class = "step-circle completed" if is_completed else "step-circle"
+        
+        step_html += f'''
+            <div class="{step_class}">
+                <div class="{circle_class}">{"✓" if is_completed else str(i+1)}</div>
+                <span>{step}</span>
+            </div>
+        '''
+        
+        if i < len(steps) - 1:
+            divider_class = "step-divider completed" if is_completed and steps[i+1] in completed_steps else "step-divider"
+            step_html += f'<div class="{divider_class}"></div>'
     
-    # Progress indicators row
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        status = "✅" if "Job Profile" in completed_steps else "⭕"
-        st.markdown(f"**{status} Job Profile**")
-    with col2:
-        status = "✅" if "Resumes" in completed_steps else "⭕"
-        st.markdown(f"**{status} Resumes**")
-    with col3:
-        status = "✅" if "Configuration" in completed_steps else "⭕"
-        st.markdown(f"**{status} Configuration**")
-    with col4:
-        status = "✅" if len(completed_steps) == 4 else "⭕"
-        st.markdown(f"**{status} Ready to Start**")
+    step_html += '</div>'
+    st.markdown(step_html, unsafe_allow_html=True)
     
-    st.markdown("---")
-    
-    # Tab-based wizard flow with enhanced titles
-    tab_titles = [
-        f"📝 Job Profile {'✅' if 'Job Profile' in completed_steps else ''}",
-        f"📄 Resumes {'✅' if 'Resumes' in completed_steps else ''}",
-        f"⚙️ Configuration {'✅' if 'Configuration' in completed_steps else ''}",
-        f"🚀 Review & Start {'✅' if len(completed_steps) == 4 else ''}"
-    ]
-    
-    tab1, tab2, tab3, tab4 = st.tabs(tab_titles)
+    # Clean tabs without duplicate status indicators - reordered with Configuration first
+    tab1, tab2, tab3, tab4 = st.tabs(["Configuration", "Job Profile", "Resumes", "Review"])
 
     with tab1:
-        # Job Profile section
-        st.markdown("### 📝 Job Profile")
+        # Configuration section - now first tab
+        st.markdown('<div class="instruction-banner">🎯 Start here: Configure your AI screening agents and analysis preferences</div>', unsafe_allow_html=True)
         
-        # Job profile input options
-        job_input_method = st.radio(
-            "How would you like to provide the job profile?",
-            ["📝 Direct Text Input", "🔗 URL/Link"],
-            horizontal=True
-        )
-        
-        if job_input_method == "📝 Direct Text Input":
-            job_profile_input = st.text_area(
-                "Enter the job description:",
-                value=st.session_state.job_profile,
-                height=300,
-                placeholder="Example: Senior Software Engineer position requiring 5+ years experience in Python, React, and cloud technologies. Must have experience with microservices architecture...",
-                help="💡 Tip: Include specific skills, experience requirements, and qualifications for better matching accuracy"
-            )
-            
-            # Character counter and validation
-            char_count = len(job_profile_input)
-            if char_count > 0:
-                if char_count < 100:
-                    st.warning(f"📝 {char_count} characters - Consider adding more details for better analysis")
-                else:
-                    st.success(f"✅ {char_count} characters - Good job description length!")
-            
-            st.session_state.job_profile = job_profile_input
-        else:
-            job_url = st.text_input(
-                "Enter job posting URL:",
-                placeholder="https://example.com/job-posting",
-                help="We'll extract the job description from this URL"
-            )
-            if job_url:
-                st.info("URL processing will be implemented to extract job details")
-                # TODO: Implement URL processing
-                st.session_state.job_profile = "URL processing feature coming soon. Please use direct text input for now."
-
-        # Show resume status with enhanced styling
-        if st.session_state.resumes:
-            st.markdown(
-                f"""
-                <div style="
-                    background-color: #d4edda; 
-                    border: 1px solid #c3e6cb; 
-                    border-radius: 8px; 
-                    padding: 15px; 
-                    margin: 10px 0;
-                ">
-                    <h4 style="color: #155724; margin: 0;">✅ Resume Upload Complete</h4>
-                    <p style="color: #155724; margin: 5px 0 0 0;">
-                        {len(st.session_state.resumes)} resume(s) successfully processed. 
-                        You can manage them in the 'Resumes' tab.
-                    </p>
-                </div>
-                """, 
-                unsafe_allow_html=True
-            )
-        else:
-            st.markdown(
-                """
-                <div style="
-                    background-color: #fff3cd; 
-                    border: 1px solid #ffeaa7; 
-                    border-radius: 8px; 
-                    padding: 15px; 
-                    margin: 10px 0;
-                ">
-                    <h4 style="color: #856404; margin: 0;">📄 Next Step: Upload Resumes</h4>
-                    <p style="color: #856404; margin: 5px 0 0 0;">
-                        Navigate to the 'Resumes' tab to upload candidate files for screening.
-                    </p>
-                </div>
-                """, 
-                unsafe_allow_html=True
-            )
-
-
-    with tab2:
-        # Resumes section (for detailed file management)
-        st.markdown("### 📄 Resumes")
-        uploaded_files_tab2 = st.file_uploader( # Changed variable name for clarity
-            "Upload resume files here:", # Slightly different label
-            type=['pdf', 'docx', 'txt'],
-            accept_multiple_files=True,
-            help="Support for PDF, DOCX, and TXT files. You can upload multiple resumes at once.",
-            key="resume_uploader_tab2"  # Unique key for this file_uploader
-        )
-        
-        if uploaded_files_tab2:
-            with st.spinner("📖 Processing uploaded resumes..."):
-                st.info(f"🔍 Processing {len(uploaded_files_tab2)} uploaded file(s)...")
-                newly_processed_resumes = process_resume_files(uploaded_files_tab2)
-                st.success(f"✅ Successfully processed {len(newly_processed_resumes)} resume(s) from upload")
-                
-                # Append new resumes to existing ones in session state, avoiding duplicates by filename
-                existing_filenames = {r['filename'] for r in st.session_state.resumes}
-                added_count = 0
-                for res in newly_processed_resumes:
-                    if res['filename'] not in existing_filenames:
-                        st.session_state.resumes.append(res)
-                        existing_filenames.add(res['filename'])
-                        added_count += 1
-                    else:
-                        st.warning(f"⚠️ Skipped duplicate file: {res['filename']}")
-                
-                if added_count > 0:
-                    st.success(f"➕ Added {added_count} new resume(s) to your collection")
-            
-        if st.session_state.resumes:
-            st.success(f"✅ Successfully processed {len(st.session_state.resumes)} resume(s)")
-            
-            # Debug information
-            with st.expander("🔍 Debug Information", expanded=False):
-                st.write("**Current resumes in session state:**")
-                for i, resume in enumerate(st.session_state.resumes):
-                    st.write(f"{i+1}. {resume['filename']} ({len(resume['content'])} chars)")
-            
-            col_clear, col_space = st.columns([1, 3])
-            with col_clear:
-                if st.button("🗑️ Clear All Resumes", help="Remove all uploaded files and start over", key="clear_resumes_button"):
-                    st.session_state.resumes = []
-                    st.rerun()
-            
-            # Enhanced resume preview with file info
-            with st.expander(f"📋 Preview Resumes ({len(st.session_state.resumes)})", expanded=False):
-                for i, resume in enumerate(st.session_state.resumes):
-                    # File info header
-                    file_extension = resume['filename'].split('.')[-1].upper()
-                    file_size = f"{len(resume['content'])} chars"
-                    
-                    col_info, col_remove = st.columns([4, 1])
-                    with col_info:
-                        st.markdown(f"**📄 {i+1}. {resume['filename']}** (`{file_extension}` • {file_size})")
-                    with col_remove:
-                        if st.button("❌", key=f"remove_{i}", help=f"Remove {resume['filename']}"):
-                            st.session_state.resumes.pop(i)
-                            st.rerun()
-                    
-                    # Content preview
-                    preview_text = resume['content'][:300] + "..." if len(resume['content']) > 300 else resume['content']
-                    st.text_area(
-                        f"Content preview:",
-                        value=preview_text,
-                        height=100,
-                        disabled=True,
-                        key=f"preview_{i}"
-                    )
-                    if i < len(st.session_state.resumes) - 1:
-                        st.divider()
-            # Clear the uploader after processing to prevent re-processing on rerun if files are not changed by user
-            # This is a common pattern but might need adjustment based on desired UX
-            # For now, let's rely on session state to manage the list of resumes.
-
-    with tab3:
-        # Screening Configuration section
         st.markdown("### ⚙️ Screening Configuration")
         st.markdown("Configure the AI agents and analysis depth for optimal screening results.")
         
@@ -596,55 +604,364 @@ def app():
             }
             st.info(depth_descriptions[analysis_depth])
 
+        # Dynamic Agent Preview Section
+        st.markdown("---")
+        st.markdown("### 🤖 Your AI Screening Team")
+        if num_agents != st.session_state.num_agents:
+            st.info(f"🔄 Agent configuration updated: {st.session_state.num_agents} → {num_agents} agents")
+        st.markdown(f"**{num_agents} Expert Agents** will be created for your screening process:")
+        
+        # Define agent types and responsibilities based on count
+        def get_agent_lineup(count):
+            base_agents = [
+                {
+                    "name": "Skills Analysis Agent",
+                    "icon": "🔧",
+                    "specialty": "Technical Skills & Expertise",
+                    "duties": [
+                        "Analyze technical skills alignment",
+                        "Evaluate programming languages & frameworks", 
+                        "Assess tool proficiency & certifications",
+                        "Cross-reference requirements with experience"
+                    ]
+                },
+                {
+                    "name": "Experience Evaluation Agent", 
+                    "icon": "📈",
+                    "specialty": "Work Experience & Career",
+                    "duties": [
+                        "Evaluate work experience relevance",
+                        "Analyze company backgrounds & industries",
+                        "Assess career progression patterns", 
+                        "Match role responsibilities with requirements"
+                    ]
+                },
+                {
+                    "name": "Education Assessment Agent",
+                    "icon": "🎓", 
+                    "specialty": "Educational Background",
+                    "duties": [
+                        "Review educational qualifications",
+                        "Evaluate degree relevance & institutions",
+                        "Assess certifications & additional training",
+                        "Analyze academic achievements & projects"
+                    ]
+                },
+                {
+                    "name": "Cultural Fit Agent",
+                    "icon": "🤝",
+                    "specialty": "Team & Cultural Alignment", 
+                    "duties": [
+                        "Analyze cultural alignment indicators",
+                        "Evaluate communication & collaboration signals",
+                        "Assess personality traits & work style",
+                        "Review team dynamics potential"
+                    ]
+                },
+                {
+                    "name": "Leadership Assessment Agent",
+                    "icon": "👑",
+                    "specialty": "Leadership & Management",
+                    "duties": [
+                        "Evaluate leadership experience",
+                        "Analyze team management & project leadership", 
+                        "Assess strategic thinking capabilities",
+                        "Review mentoring & development skills"
+                    ]
+                },
+                {
+                    "name": "Technical Depth Agent", 
+                    "icon": "🔬",
+                    "specialty": "Deep Technical Analysis",
+                    "duties": [
+                        "Deep-dive into technical expertise",
+                        "Analyze system architecture experience",
+                        "Evaluate problem-solving & debugging skills", 
+                        "Assess code quality & best practices knowledge"
+                    ]
+                }
+            ]
+            return base_agents[:count]
+        
+        agent_lineup = get_agent_lineup(num_agents)
+        
+        # Display agent cards in a responsive grid
+        for i in range(0, len(agent_lineup), 2):
+            cols = st.columns(2)
+            for j, col in enumerate(cols):
+                if i + j < len(agent_lineup):
+                    agent = agent_lineup[i + j]
+                    with col:
+                        st.markdown(f'''
+                        <div class="agent-preview-card">
+                            <div class="agent-title">{agent["icon"]} {agent["name"]}</div>
+                            <div class="agent-description">{agent["specialty"]}</div>
+                        </div>
+                        ''', unsafe_allow_html=True)
+                        
+                        with st.expander(f"View {agent['name']} duties", expanded=False):
+                            st.markdown("**Key Responsibilities:**")
+                            for duty in agent["duties"]:
+                                st.write(f"• {duty}")
+        
+        # Recruiter Preferences Section
+        st.markdown("---")
+        st.markdown("### 👤 Recruiter Preferences")
+        st.markdown("Add specific priorities or requirements to customize the screening process:")
+        
+        col_pref1, col_pref2 = st.columns([1, 1])
+        
+        with col_pref1:
+            recruiter_priorities = st.text_area(
+                "🎯 Hiring Priorities & Focus Areas",
+                value=st.session_state.recruiter_priorities,
+                height=100,
+                placeholder="e.g., Prioritize candidates with startup experience, remote work capability, leadership potential...",
+                help="Specify what matters most for this role"
+            )
+            st.session_state.recruiter_priorities = recruiter_priorities
+            
+        with col_pref2:
+            special_requirements = st.text_area(
+                "📋 Special Requirements & Deal-breakers",
+                value=st.session_state.special_requirements, 
+                height=100,
+                placeholder="e.g., Must have security clearance, relocation not possible, specific visa requirements...",
+                help="List any non-negotiable requirements"
+            )
+            st.session_state.special_requirements = special_requirements
+        
+        # Action buttons
+        col_action1, col_action2, col_action3 = st.columns([1, 1, 1])
+        with col_action2:
+            if st.button("� Save Configuration", type="primary", use_container_width=True):
+                st.success("✅ Configuration saved successfully!")
+                st.info("📋 Next: Define your job profile in the Job Profile tab")
+
+    with tab2:
+        # Job Profile section
+        st.markdown('<div class="instruction-banner">� Next: Define the job profile with requirements and qualifications</div>', unsafe_allow_html=True)
+        
+        st.markdown("### Job Description")
+        
+        # Drag and drop or text area for job profile
+        job_input_method = st.radio(
+            "Choose input method:",
+            ["✏️ Type/Paste Job Description", "📁 Upload Job Description File"],
+            horizontal=True
+        )
+        
+        if job_input_method == "✏️ Type/Paste Job Description":
+            job_profile_input = st.text_area(
+                "Enter the job description or requirements:",
+                value=st.session_state.job_profile,
+                height=200,
+                placeholder="Senior Software Engineer position requiring 5+ years experience in Python, React, and cloud technologies...",
+                help="Include specific skills, experience requirements, and qualifications for better matching"
+            )
+        else:
+            # File upload for job description
+            st.markdown('''
+            <div class="drag-drop-area">
+                📁 Drag and drop job description file here<br>
+                <small>Supported formats: TXT, PDF, DOCX</small>
+            </div>
+            ''', unsafe_allow_html=True)
+            
+            uploaded_job_file = st.file_uploader(
+                "Or click to upload job description file:",
+                type=['txt', 'pdf', 'docx'],
+                help="Upload a file containing the job description"
+            )
+            
+            job_profile_input = st.session_state.job_profile
+            
+            if uploaded_job_file:
+                with st.spinner("📖 Processing job description file..."):
+                    if uploaded_job_file.type == "text/plain":
+                        job_content = str(uploaded_job_file.read(), "utf-8")
+                    elif uploaded_job_file.type == "application/pdf":
+                        job_content = extract_text_from_pdf(uploaded_job_file)
+                    elif uploaded_job_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+                        job_content = extract_text_from_docx(uploaded_job_file)
+                    else:
+                        st.error("Unsupported file type")
+                        job_content = ""
+                    
+                    if job_content.strip():
+                        job_profile_input = job_content
+                        st.success(f"✅ Successfully loaded job description ({len(job_content)} characters)")
+                    else:
+                        st.error("❌ Failed to extract content from file")
+        
+        st.session_state.job_profile = job_profile_input
+        
+        # Simple character counter
+        char_count = len(job_profile_input)
+        if char_count > 0:
+            status_color = "🟢" if char_count >= 100 else "🟡"
+            st.caption(f"{status_color} {char_count} characters")
+        
+        # Action button
+        col_action = st.columns([2, 1, 2])
+        with col_action[1]:
+            if st.button("💾 Save Job Profile", type="primary", use_container_width=True, disabled=not job_profile_input.strip()):
+                st.success("✅ Job profile saved!")
+                st.info("📄 Next: Upload resumes in the Resumes tab")
+
+
+    with tab3:
+        # Resumes section with improved drag and drop
+        st.markdown('<div class="instruction-banner">📄 Upload candidate resumes for AI-powered screening and analysis</div>', unsafe_allow_html=True)
+        
+        st.markdown("### 📄 Resumes")
+        
+        # Enhanced drag and drop area
+        st.markdown('''
+        <div class="drag-drop-area">
+            📁 Drag and drop resume files here<br>
+            <small>Supported formats: PDF, DOCX, TXT • Multiple files supported</small>
+        </div>
+        ''', unsafe_allow_html=True)
+        
+        uploaded_files_tab3 = st.file_uploader(
+            "Or click to upload resume files:",
+            type=['pdf', 'docx', 'txt'],
+            accept_multiple_files=True,
+            help="Support for PDF, DOCX, and TXT files. You can upload multiple resumes at once.",
+            key="resume_uploader_tab3"
+        )
+        
+        if uploaded_files_tab3:
+            with st.spinner("📖 Processing uploaded resumes..."):
+                st.info(f"🔍 Processing {len(uploaded_files_tab3)} uploaded file(s)...")
+                newly_processed_resumes = process_resume_files(uploaded_files_tab3)
+                st.success(f"✅ Successfully processed {len(newly_processed_resumes)} resume(s) from upload")
+                
+                # Append new resumes to existing ones in session state, avoiding duplicates by filename
+                existing_filenames = {r['filename'] for r in st.session_state.resumes}
+                added_count = 0
+                for res in newly_processed_resumes:
+                    if res['filename'] not in existing_filenames:
+                        st.session_state.resumes.append(res)
+                        existing_filenames.add(res['filename'])
+                        added_count += 1
+                    else:
+                        st.warning(f"⚠️ Skipped duplicate file: {res['filename']}")
+                
+                if added_count > 0:
+                    st.success(f"➕ Added {added_count} new resume(s) to your collection")
+            
+        if st.session_state.resumes:
+            st.success(f"✅ Successfully processed {len(st.session_state.resumes)} resume(s)")
+            
+            # Action buttons
+            col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
+            with col_btn1:
+                if st.button("🗑️ Clear All Resumes", help="Remove all uploaded files and start over", key="clear_resumes_button"):
+                    st.session_state.resumes = []
+                    st.rerun()
+            with col_btn3:
+                if st.button("� Save Resumes", type="primary", help="Confirm resume selection", key="save_resumes_button"):
+                    st.success("✅ Resumes saved successfully!")
+                    st.info("🚀 Next: Review and start screening in the Review tab")
+            
+            # Enhanced resume preview with file info
+            with st.expander(f"📋 Preview Resumes ({len(st.session_state.resumes)})", expanded=False):
+                for i, resume in enumerate(st.session_state.resumes):
+                    # File info header
+                    file_extension = resume['filename'].split('.')[-1].upper()
+                    file_size = f"{len(resume['content'])} chars"
+                    
+                    col_info, col_remove = st.columns([4, 1])
+                    with col_info:
+                        st.markdown(f"**📄 {i+1}. {resume['filename']}** (`{file_extension}` • {file_size})")
+                    with col_remove:
+                        if st.button("❌", key=f"remove_{i}", help=f"Remove {resume['filename']}"):
+                            st.session_state.resumes.pop(i)
+                            st.rerun()
+                    
+                    # Content preview
+                    preview_text = resume['content'][:300] + "..." if len(resume['content']) > 300 else resume['content']
+                    st.text_area(
+                        f"Content preview:",
+                        value=preview_text,
+                        height=100,
+                        disabled=True,
+                        key=f"preview_{i}"
+                    )
+                    if i < len(st.session_state.resumes) - 1:
+                        st.divider()
+        else:
+            st.info("📤 Upload resume files to begin the screening process")
+
     with tab4:
         # Review inputs and final Start Screening button
-        st.markdown("### 🚀 Review & Start Screening")
-        # Ensure job_profile is initialized, e.g., from session_state or set to empty string
-        job_profile_tab4 = st.session_state.get('job_profile', "") # Get from session_state or default
-        resumes_tab4 = st.session_state.get('resumes', []) # Get from session_state or default
-
+        st.markdown('<div class="instruction-banner">🚀 Review your configuration and start the AI-powered resume screening</div>', unsafe_allow_html=True)
+        
+        st.markdown("### � Review & Start Screening")
+        
+        job_profile_tab4 = st.session_state.get('job_profile', "")
+        resumes_tab4 = st.session_state.get('resumes', [])
         can_start = job_profile_tab4.strip() and resumes_tab4
         
-        # Display a summary of what will be screened
+        # Configuration Summary
+        st.markdown("#### ⚙️ Configuration Summary")
+        col_summary1, col_summary2 = st.columns([1, 1])
+        
+        with col_summary1:
+            st.info(f"""
+            **🤖 AI Agents:** {st.session_state.num_agents} expert agents
+            **🔍 Analysis:** {st.session_state.analysis_depth}
+            **📄 Resumes:** {len(resumes_tab4)} files uploaded
+            """)
+            
+        with col_summary2:
+            priorities_text = st.session_state.get('recruiter_priorities', 'None specified')[:50] + "..." if len(st.session_state.get('recruiter_priorities', '')) > 50 else st.session_state.get('recruiter_priorities', 'None specified')
+            requirements_text = st.session_state.get('special_requirements', 'None specified')[:50] + "..." if len(st.session_state.get('special_requirements', '')) > 50 else st.session_state.get('special_requirements', 'None specified')
+            
+            st.info(f"""
+            **🎯 Priorities:** {priorities_text}
+            **� Requirements:** {requirements_text}
+            **⏱️ Est. Time:** {st.session_state.num_agents * 2} minutes
+            """)
+        
+        # Display detailed summaries with expandable sections
         if job_profile_tab4.strip():
-            with st.expander("Review Job Profile", expanded=False):
+            with st.expander("📝 Review Job Profile", expanded=False):
                 st.text_area("Job Profile:", value=job_profile_tab4, height=150, disabled=True, key="review_job_profile")
         else:
-            st.warning("⚠️ Please provide a job profile in the 'Job Profile' tab.")
+            st.error("❌ Please provide a job profile in the 'Job Profile' tab.")
 
         if resumes_tab4:
-            with st.expander(f"Review Resumes ({len(resumes_tab4)})", expanded=False):
+            with st.expander(f"📄 Review Resumes ({len(resumes_tab4)})", expanded=False):
                 st.write(f"**Total resumes to be screened: {len(resumes_tab4)}**")
                 for i, resume in enumerate(resumes_tab4):
                     st.markdown(f"**{i+1}. {resume['filename']}** ({len(resume['content'])} characters)")
-                    
-                # Debug section
-                st.write("---")
-                st.write("**Debug Info:**")
-                st.write(f"Session state resumes count: {len(st.session_state.get('resumes', []))}")
-                st.write(f"Local resumes_tab4 count: {len(resumes_tab4)}")
         else:
-            st.warning("⚠️ Please upload at least one resume in the 'Resumes' tab.")
-
+            st.error("❌ Please upload at least one resume in the 'Resumes' tab.")
+        
+        # Pre-screening validation
+        if can_start:
+            st.success("✅ All requirements met - Ready to start screening!")
+        else:
+            st.warning("⚠️ Please complete all required steps before starting the screening process.")
+        
+        # Start screening button with consistent design
         if st.button(
-            '🔍 Start Resume Screening',
+            '� Start AI Resume Screening',
             disabled=not can_start or st.session_state.get('running', False),
             type="primary",
             use_container_width=True,
-            key="start_screening_button_tab4" # Added key
+            key="start_screening_button_tab4"
         ):
             if can_start:
                 # Check usage limits before proceeding
                 if not add_usage_monitoring():
-                    st.stop()  # Stop execution if limits exceeded
+                    st.stop()
                 
                 st.session_state.running = True
-                # ... rest of your screening logic ...
-                # Ensure job_profile and resumes are correctly passed to main_screening
-                # For example, by retrieving them from session_state if they are stored there
-                # or by ensuring they are correctly scoped from the tabs.
                 
-                # Assuming job_profile and resumes are updated in session_state from their respective tabs
                 job_profile_to_screen = st.session_state.get('job_profile', "")
                 resumes_to_screen = st.session_state.get('resumes', [])
 
@@ -654,7 +971,7 @@ def app():
                     
                     try:
                         screening_results = asyncio.run(
-                            main_screening(job_profile_to_screen, resumes_to_screen, st.session_state.get('num_agents', 4)) # Ensure num_agents is also available
+                            main_screening(job_profile_to_screen, resumes_to_screen, st.session_state.get('num_agents', 4))
                         )
                         st.session_state.screening_results = screening_results
                         st.session_state.running = False
