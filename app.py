@@ -506,6 +506,8 @@ def app():
         st.session_state.running = False
     if 'screening_results' not in st.session_state:
         st.session_state.screening_results = None
+    if 'screening_completed' not in st.session_state:
+        st.session_state.screening_completed = False
     if 'recruiter_priorities' not in st.session_state:
         st.session_state.recruiter_priorities = ""
     if 'special_requirements' not in st.session_state:
@@ -1002,6 +1004,7 @@ def app():
                             main_screening(job_profile_to_screen, resumes_to_screen, st.session_state.get('num_agents', 4))
                         )
                         st.session_state.screening_results = screening_results
+                        st.session_state.screening_completed = True  # Mark as completed
                         st.session_state.running = False
                         
                         # Record usage after successful processing
@@ -1122,38 +1125,42 @@ def display_screening_results(results, resumes):
                     st.markdown("**🎓 Education Data:**")
                     st.write(", ".join(result['extracted_education']))
     
-    # Download report buttons
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("📥 Download CSV Report", type="secondary"):
-            if 'screening_results' in st.session_state and st.session_state.screening_results:
-                # Generate and download CSV report
+    # Download report buttons - Use direct download buttons to avoid page reruns
+    if 'screening_results' in st.session_state and st.session_state.screening_results:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Generate CSV report
+            try:
                 report_data = generate_detailed_report(st.session_state.screening_results)
                 st.download_button(
-                    label="📄 Download CSV Report",
+                    label="� Download CSV Report",
                     data=report_data,
                     file_name=f"resume_screening_report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                     mime="text/csv",
-                    key="download_csv_report"
+                    key="download_csv_direct",
+                    help="Download detailed screening results as CSV"
                 )
-            else:
-                st.error("No screening results available. Please run the screening first.")
-    
-    with col2:
-        if st.button("📄 Download Summary Report", type="secondary"):
-            if 'screening_results' in st.session_state and st.session_state.screening_results:
-                # Generate and download summary text report
+            except Exception as e:
+                st.error(f"Error generating CSV report: {str(e)}")
+        
+        with col2:
+            # Generate summary report
+            try:
                 summary_data = generate_summary_report(st.session_state.screening_results)
                 st.download_button(
-                    label="📄 Download Summary",
+                    label="📄 Download Summary Report",
                     data=summary_data,
                     file_name=f"resume_screening_summary_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
                     mime="text/plain",
-                    key="download_summary_report"
+                    key="download_summary_direct",
+                    help="Download summary report as text file"
                 )
-            else:
-                st.error("No screening results available. Please run the screening first.")
+            except Exception as e:
+                st.error(f"Error generating summary report: {str(e)}")
+    else:
+        st.info("📥 Download options will appear after screening is completed.")
+
 
 def generate_summary_report(results):
     """Generate a human-readable summary report"""
